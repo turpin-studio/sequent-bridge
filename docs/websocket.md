@@ -142,8 +142,8 @@ when it starts, takes or loses the tempo master role, and stops. Mac only.
 
 ## From the app: `lead`
 
-While an app carries on after the decks stop, it may ask the bridge to lead
-them: on every beat, `{"type": "lead", "playing": true, "tempo": 124.0,
+While an app wants to be the decks' tempo master (the instruments page's
+Master toggle), it may ask the bridge to lead them: on every beat, `{"type": "lead", "playing": true, "tempo": 124.0,
 "beat": 1, "beatAt": 1792251567994}`, and `{"type": "lead", "playing":
 false}` when it stops. The bridge becomes a player, takes the tempo master
 role and sends a beat packet at `beatAt`, so a deck with Sync on follows.

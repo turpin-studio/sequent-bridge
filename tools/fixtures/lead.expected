@@ -23,12 +23,13 @@ announce 4
 status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
 status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
 status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
-# deck 2 asks for master back
+# deck 2 asks for master back, and keeps it
 announce 4
 unicast 169.254.2.2:50001 kind=27 01000400080000000400000001
 unicast 169.254.2.2:50002 kind=27 01000400080000000400000001
 status len=284 master=1 playing=1 synced=1 Mm=1 Mh=02 sync=1 beat=0
 master false
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=8 beat=0
 status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=8 beat=0
 # the page stops with deck 2 playing in sync
 announce 4

@@ -22,9 +22,9 @@ and only while the page carries on after the decks stop, it leads them
 
 ## Leading
 
-When the followed deck stops, the page carries on at its tempo and in its
-bar, and sends the app a `lead` message on every beat (docs/websocket.md).
-The app then leads the decks, so one with Sync on follows Sequent:
+With the page's Master toggle on, the page keeps its own time and sends the
+app a `lead` message on every beat (docs/websocket.md). The app then leads
+the decks, so one with Sync on follows Sequent:
 
 - **It becomes a real player.** Players take a tempo master only from player
   numbers 1 to 4 (beat-link insists on it too), so it announces as the
@@ -45,6 +45,10 @@ The app then leads the decks, so one with Sync on follows Sequent:
   go, our sync counter one above the players'. When the page stops leading
   it hands master to a player playing in sync, or just lets it go, and a
   second later (four at most) announces as 7 again.
+- **A deck that takes master keeps it.** The request is repeated only until
+  Sequent has held master once; after a deck takes it (its MASTER button),
+  that's the DJ's choice and isn't fought over, and the page switches its
+  toggle off on seeing `leading` with master false.
 - **Its own packets are dropped** on the way in, by source address, so it
   never takes its own announcements and beats for a deck.
 

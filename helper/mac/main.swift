@@ -245,6 +245,7 @@ final class Leader {
     private var sync = 1, largestSync = 0, counter = 0
     private var stoppedAt: Double? = nil
     private var heardAt = 0.0                       // when the page last said lead
+    private var held = false                        // had master this time: a deck that takes it keeps it
     var out: (Out) -> Void = { _ in }
 
     // The page says lead, at this tempo, on this beat of the bar; `players`
@@ -261,7 +262,7 @@ final class Leader {
                 number = UInt8(n)
                 out(.announceAs(UInt8(n)))
             }
-            if !leading { leading = true; claim(players, now: now, ask: false) }
+            if !leading { leading = true; held = false; claim(players, now: now, ask: false) }
         } else if leading {
             leading = false
             stoppedAt = now
@@ -301,7 +302,10 @@ final class Leader {
         guard let number else { return }
         // A page that has gone quiet (closed, or asleep) stops leading.
         if leading, now - heardAt > 2 { lead(playing: false, tempo: 0, beatInBar: beatInBar, players: players, now: now) }
-        if leading, !master, now - claimedAt > 2 { claim(players, now: now) }
+        // Asked again until we've had it; once a deck has taken it from us
+        // (its MASTER button), it's the DJ's choice, and not fought over.
+        if leading, !master, !held, now - claimedAt > 2 { claim(players, now: now) }
+        if master { held = true }
         if !leading, let at = stoppedAt, now - at > 1, next == 0xff || now - at > 4 {
             master = false
             self.number = nil; stoppedAt = nil; next = 0xff; asked = 0
@@ -320,7 +324,7 @@ final class Leader {
         largestSync = max(largestSync, u32(p, 0x84))
         guard isMaster else { return }
         if yieldingTo == number {
-            if leading { master = true; asked = 0 }
+            if leading { master = true; held = true; asked = 0 }
         } else if yieldingTo == 0xff, master {
             // Another player asserting master: handed over as we said, or taken.
             if from == next { sync = largestSync + 1 }
@@ -1064,7 +1068,7 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.lead(playing: true, tempo: 124, beatInBar: 2, players: oneMaster, now: 2.5)
         l.tick(now: 3, players: oneMaster)
     }
-    run("deck 2 asks for master back") { l in
+    run("deck 2 asks for master back, and keeps it") { l in
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
         l.status(deck(2, master: false, sync: 7))
         l.requested(by: 2, ip: "169.254.2.2")
@@ -1072,6 +1076,9 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.status(deck(2, master: true))
         print("master \(l.master)")
         l.tick(now: 0.4, players: two)
+        let deck2Master: Players = [1: ("169.254.1.1", false, false, true), 2: ("169.254.2.2", true, true, true)]
+        l.lead(playing: true, tempo: 124, beatInBar: 2, players: deck2Master, now: 2.5)
+        l.tick(now: 3, players: deck2Master)
     }
     let synced: Players = [1: ("169.254.1.1", false, false, true), 2: ("169.254.2.2", false, true, true)]
     run("the page stops with deck 2 playing in sync") { l in
