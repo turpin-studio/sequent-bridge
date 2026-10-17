@@ -8,7 +8,9 @@
 // over a WebSocket on 127.0.0.1:8795, accepting only turpin.studio and
 // localhost. The messages are the ones the Python helper sent, so the page
 // didn't change when the app replaced it.
-// It never sends the players anything that changes what they do.
+// It sends the players nothing that changes what they do, except when the
+// page asks it to lead them (Leader, below): then it takes the tempo master
+// role, so a deck with Sync on follows Sequent.
 
 import AppKit
 import Network
@@ -138,6 +140,195 @@ func announcement(number: UInt8, ip: [UInt8], mac: [UInt8]) -> [UInt8] {
     p += ip
     p += [0x01, 0x00, 0x00, 0x00, 0x01, 0x00]
     return p
+}
+
+// MARK: - Leading: Sequent as the tempo master
+
+// When the page carries on after the decks stop, Sequent can lead them: it
+// becomes a player (a real number, 1 to 4, which is what players accept a
+// master from), sends status and beat packets like a playing, synced CDJ,
+// and takes the tempo master role, so a deck with Sync on follows Sequent's
+// tempo and beat. The layouts are Deep Symmetry's (vcdj, beats and sync
+// notes); the byte templates are the ones their beat-link sends, as facts of
+// the protocol.
+
+// Every beat-port and status-port packet: the magic, its kind, our name.
+func header(_ kind: UInt8) -> [UInt8] {
+    var name = Array("sequent".utf8); name += [UInt8](repeating: 0, count: 20 - name.count)
+    return MAGIC + [kind] + name
+}
+func put(_ p: inout [UInt8], _ at: Int, _ v: Int, _ size: Int) {
+    for i in 0..<size { p[at + i] = UInt8(truncatingIfNeeded: v >> (8 * (size - 1 - i))) }
+}
+
+// A CDJ status packet (0x0a, 0x11c bytes), offsets as Deep Symmetry number
+// them (from the start of the packet).
+let STATUS_TEMPLATE: [UInt8] = [
+    0x01, 0x04, 0x00, 0x00, 0xf8, 0x00, 0x00, 0x01, 0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x04, 0x00, 0x00, 0x00,
+    0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x31, 0x2e, 0x34,
+    0x33, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x10, 0x00,
+    0x00, 0x80, 0x00, 0x00, 0x00, 0x7f, 0xff, 0xff, 0xff, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0f, 0x01, 0x00,
+    0x00, 0x12, 0x34, 0x56, 0x78, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x15, 0x00, 0x00, 0x07, 0x61, 0x00, 0x00, 0x06, 0x2f,
+]
+func statusPacket(number: UInt8, playing: Bool, master: Bool, synced: Bool, handoff: UInt8, tempo: Double, beat: Int, beatInBar: Int, sync: Int, counter: Int) -> [UInt8] {
+    var p = header(0x0a) + STATUS_TEMPLATE
+    p[0x21] = number; p[0x24] = number; p[0x28] = number   // D, and the player the track is from
+    p[0x27] = playing ? 1 : 0
+    p[0x7b] = playing ? 3 : 5                                // P1: playing or paused
+    put(&p, 0x84, sync, 4)                                   // the sync counter
+    p[0x89] = 0x84 | (playing ? 0x40 : 0) | (master ? 0x20 : 0) | (synced ? 0x10 : 0)
+    p[0x8b] = playing ? 0x7a : 0x7e                          // P2
+    put(&p, 0x92, Int((tempo * 100).rounded()), 2)           // the track's tempo; pitch stays at 0%
+    p[0x9d] = playing ? 9 : 1                                // P3
+    p[0x9e] = master ? 1 : 0                                 // Mm
+    p[0x9f] = handoff                                        // Mh: 0xff, or the player master goes to
+    put(&p, 0xa0, beat, 4)
+    p[0xa6] = UInt8(beatInBar)
+    put(&p, 0xc8, counter, 4)
+    return p
+}
+
+// A beat packet (0x28, 0x60 bytes): the times to the next beats and bars at
+// this tempo, the tempo, and the beat in the bar.
+let BEAT_TEMPLATE: [UInt8] = [
+    0x01, 0x00, 0x0d, 0x00, 0x3c, 0x01, 0x01, 0x01, 0x01, 0x02, 0x02, 0x02, 0x02, 0x10, 0x10, 0x10,
+    0x10, 0x04, 0x04, 0x04, 0x04, 0x20, 0x20, 0x20, 0x20, 0x08, 0x08, 0x08, 0x08, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00,
+    0x0d,
+]
+func beatPacket(number: UInt8, tempo: Double, beatInBar: Int) -> [UInt8] {
+    var p = header(0x28) + BEAT_TEMPLATE
+    let beatMs = Int((60000 / tempo).rounded()), nextBar = beatMs * (5 - beatInBar)
+    p[0x21] = number
+    put(&p, 0x24, beatMs, 4); put(&p, 0x28, beatMs * 2, 4); put(&p, 0x2c, nextBar, 4)
+    put(&p, 0x30, beatMs * 4, 4); put(&p, 0x34, nextBar + beatMs * 4, 4); put(&p, 0x38, beatMs * 8, 4)
+    put(&p, 0x5a, Int((tempo * 100).rounded()), 2)
+    p[0x5c] = UInt8(beatInBar)
+    p[0x5f] = number
+    return p
+}
+
+// Asking the master to hand over (0x26), and agreeing to hand over (0x27).
+func handoffRequest(number: UInt8) -> [UInt8] { header(0x26) + [0x01, 0x00, number, 0x00, 0x04, 0x00, 0x00, 0x00, number] }
+func handoffResponse(number: UInt8) -> [UInt8] { header(0x27) + [0x01, 0x00, number, 0x00, 0x08, 0x00, 0x00, 0x00, number, 0x00, 0x00, 0x00, 0x01] }
+
+// What leading decides, apart from the sockets and timers, so it can be
+// driven in a self-test: it is told what the page and the players say, and
+// says what to send.
+typealias Players = [Int: (ip: String, master: Bool, playing: Bool, synced: Bool)]
+enum Out: Equatable {
+    case announceAs(UInt8)                          // announce as this player
+    case status([UInt8])                            // to every player, port 50002
+    case beat([UInt8])                              // broadcast, port 50001
+    case unicast([UInt8], ip: String, port: UInt16)
+}
+final class Leader {
+    // The page's lead: playing, at what tempo, and the beat in the bar.
+    private(set) var leading = false
+    private(set) var number: UInt8? = nil           // our player number while we lead or hand over
+    private(set) var master = false
+    private var tempo = 120.0, beatInBar = 1, beat = 0
+    private var next: UInt8 = 0xff                  // the player we are handing master to
+    private var asked = 0                           // the player we asked for master
+    private var sync = 1, largestSync = 0, counter = 0
+    private var stoppedAt: Double? = nil
+    var out: (Out) -> Void = { _ in }
+
+    // The page says lead, at this tempo, on this beat of the bar; `players`
+    // are the decks seen lately with their statuses.
+    func lead(playing: Bool, tempo: Double, beatInBar: Int, players: Players, now: Double) {
+        if playing {
+            if tempo > 0 { self.tempo = tempo }
+            if (1...4).contains(beatInBar) { self.beatInBar = beatInBar }
+            stoppedAt = nil
+            if number == nil {
+                // A real player number no deck is using, from the top down.
+                guard let n = [4, 3, 2, 1].first(where: { players[$0] == nil }) else { return }
+                number = UInt8(n)
+                out(.announceAs(UInt8(n)))
+            }
+            if !leading { leading = true; claim(players, now: now) }
+        } else if leading {
+            leading = false
+            stoppedAt = now
+            // Hand master to a deck that is playing in sync, else just let it go.
+            if master, let n = players.filter({ $0.value.playing && $0.value.synced }).keys.sorted().first { next = UInt8(n) }
+            else { master = false }
+        }
+    }
+
+    // Take the master role: at once if nobody has it, else ask the master,
+    // and again every two seconds until it hands over.
+    private var claimedAt = 0.0
+    private func claim(_ players: Players, now: Double) {
+        guard let number, !master else { return }
+        claimedAt = now
+        if let (n, p) = players.first(where: { $0.value.master && $0.key != Int(number) }) {
+            asked = n
+            out(.unicast(handoffRequest(number: number), ip: p.ip, port: BEAT_PORT))
+        } else { master = true; asked = 0 }
+    }
+
+    // A beat of ours, as the page plays it.
+    func beatNow(beatInBar: Int) {
+        guard leading, let number else { return }
+        self.beatInBar = beatInBar
+        beat += 1
+        out(.beat(beatPacket(number: number, tempo: tempo, beatInBar: beatInBar)))
+    }
+
+    // Our status, five times a second while leading or handing over; the
+    // role is given up a second after the page stops, if nobody took it.
+    func tick(now: Double, players: Players) {
+        guard let number else { return }
+        if leading, !master, now - claimedAt > 2 { claim(players, now: now) }
+        if !leading, let at = stoppedAt, now - at > 1, next == 0xff || now - at > 4 {
+            master = false
+            self.number = nil; stoppedAt = nil; next = 0xff; asked = 0
+            out(.announceAs(VIRTUAL_PLAYER))
+            return
+        }
+        counter += 1
+        out(.status(statusPacket(number: number, playing: leading, master: master, synced: true, handoff: next, tempo: tempo, beat: beat, beatInBar: beatInBar, sync: sync, counter: counter)))
+    }
+
+    // A player's status packet: its sync counter, and whether it hands master
+    // to us, or has taken it.
+    func status(_ p: [UInt8]) {
+        guard p.count >= 0xa0, let number, Int(p[0x21]) != Int(number) else { return }
+        let from = p[0x21], isMaster = p[0x89] & 0x20 != 0, yieldingTo = p[0x9f]
+        largestSync = max(largestSync, u32(p, 0x84))
+        guard isMaster else { return }
+        if yieldingTo == number {
+            if leading { master = true; asked = 0 }
+        } else if yieldingTo == 0xff, master {
+            // Another player asserting master: handed over as we said, or taken.
+            if from == next { sync = largestSync + 1 }
+            master = false; next = 0xff
+        }
+    }
+
+    // A player asking us for master: agree, and name it as the next master.
+    func requested(by player: Int, ip: String) {
+        guard master, let number, player != Int(number) else { return }
+        next = UInt8(player)
+        // To the beat port, as Deep Symmetry's notes say, and the status
+        // port, where beat-link sends it; agreeing twice changes nothing.
+        out(.unicast(handoffResponse(number: number), ip: ip, port: BEAT_PORT))
+        out(.unicast(handoffResponse(number: number), ip: ip, port: STATUS_PORT))
+    }
 }
 
 // MARK: - The links: our address and MAC on each link-local interface
@@ -292,6 +483,13 @@ final class Helper {
     var onChange: () -> Void = {}
     var onBeat: () -> Void = {}
     var beats: [Int: (tempo: Double, at: Double)] = [:]   // each deck's last beat
+    // Leading the decks when the page asks (Leader, above): the player number
+    // we announce as, the timer for our status, and what the page last heard
+    // about it.
+    let leader = Leader()
+    var playerNumber = VIRTUAL_PLAYER
+    var leadTimer: Timer?
+    var told: (UInt8?, Bool) = (nil, false)
     let listenOnly = CommandLine.arguments.contains("--listen-only")
     // `--capture DIR`: keep each deck's raw status packet whenever the bytes
     // that should name its track change, for working out a layout we don't
@@ -318,6 +516,7 @@ final class Helper {
     }
 
     func start() {
+        leader.out = { [weak self] o in self?.emit(o) }
         bindPorts()
         serve()
         // Retry the ports while something else holds them, look for new links,
@@ -362,7 +561,7 @@ final class Helper {
             a.sin_addr.s_addr = link.ip.withUnsafeBytes { $0.load(as: UInt32.self) }
             let ok = withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } }
             if ok != 0 { close(fd); return nil }
-            return (fd, announcement(number: VIRTUAL_PLAYER, ip: link.ip, mac: link.mac))
+            return (fd, announcement(number: playerNumber, ip: link.ip, mac: link.mac))
         }
         linkList = now
         onChange()
@@ -384,12 +583,20 @@ final class Helper {
         let n = withUnsafeMutablePointer(to: &from) { f in f.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(fd, &buf, buf.count, 0, $0, &len) } }
         guard n > 0 else { return }
         let packet = Array(buf[0..<n]), now = Date().timeIntervalSince1970
+        // Our own announcements, status and beats come back to us: not a deck.
+        let source = withUnsafeBytes(of: from.sin_addr.s_addr) { Array($0) }
+        if linkList.contains(where: { $0.ip == source }) { return }
         // Each packet arrives once per USB link: drop the copy seen moments ago.
         let key = Data(packet)
         seen = seen.filter { now - $0.value < 0.05 }
         if seen[key] != nil { return }
         seen[key] = now
         if port == STATUS_PORT { capture(packet) }
+        if port == STATUS_PORT, packet.count > 0x0a, packet[0x0a] == 0x0a { leader.status(packet); tellPage() }
+        if port == BEAT_PORT, packet.count >= 0x28, packet[0x0a] == 0x26 {
+            leader.requested(by: Int(packet[0x21]), ip: source.map(String.init).joined(separator: "."))
+            tellPage()
+        }
         guard var msg = parse(port: port, packet) else { return }
         var ip = from.sin_addr
         var str = [CChar](repeating: 0, count: 16)
@@ -494,12 +701,90 @@ final class Helper {
         listener = l
     }
 
-    // The page never needs to say anything; reading just notices it leave.
+    // The page says one thing, `lead`, while it carries on after the decks
+    // stop; otherwise reading just notices it leave.
     func drain(_ c: NWConnection) {
-        c.receiveMessage { [weak self] _, _, _, error in
+        c.receiveMessage { [weak self] data, _, _, error in
             if error != nil { c.cancel(); return }
+            if let data, let m = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], m["type"] as? String == "lead" { self?.lead(m) }
             self?.drain(c)
         }
+    }
+
+    // MARK: Leading
+
+    // The decks seen lately, with what their status says.
+    var playerStates: Players {
+        var out: Players = [:]
+        for d in players {
+            guard let n = d["number"] as? Int, let ip = d["ip"] as? String else { continue }
+            let s = statuses[n]?.0
+            out[n] = (ip, s?["master"] as? Bool == true, s?["playing"] as? Bool == true, s?["sync"] as? Bool == true)
+        }
+        return out
+    }
+
+    // { type: "lead", playing, tempo, beat (in the bar), beatAt (ms since
+    // 1970, when the page's beat is heard) }: each beat while the page
+    // carries on, and playing false when it stops. The beat packet goes out
+    // as that beat is heard.
+    func lead(_ m: [String: Any]) {
+        guard !listenOnly else { return }
+        let playing = m["playing"] as? Bool == true, tempo = m["tempo"] as? Double ?? 0
+        let beat = m["beat"] as? Int ?? 1, now = Date().timeIntervalSince1970
+        leader.lead(playing: playing, tempo: tempo, beatInBar: beat, players: playerStates, now: now)
+        if playing, let at = m["beatAt"] as? Double {
+            let wait = at / 1000 - now
+            // A timer of its own with a millisecond's leeway: the main queue's
+            // own delays let it slip by several.
+            if wait > -0.05 {
+                let t = DispatchSource.makeTimerSource(flags: .strict, queue: .main)
+                t.schedule(deadline: .now() + max(0, wait), leeway: .milliseconds(1))
+                t.setEventHandler { [weak self] in self?.leader.beatNow(beatInBar: beat); t.cancel() }
+                t.resume()
+            }
+        }
+        if leader.number != nil, leadTimer == nil {
+            leadTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+                guard let self else { return }
+                self.leader.tick(now: Date().timeIntervalSince1970, players: self.playerStates)
+                if self.leader.number == nil { self.leadTimer?.invalidate(); self.leadTimer = nil }
+                self.tellPage()
+            }
+        }
+        tellPage()
+    }
+
+    // What leading needs sent.
+    func emit(_ o: Out) {
+        switch o {
+        case let .announceAs(n):
+            playerNumber = n
+            linkList = []   // rebuild the announcements with the new number
+            refreshLinks()
+            announce()
+        case let .status(p): for d in playerStates.values { sendTo(p, ip: d.ip, port: STATUS_PORT) }
+        case let .beat(p): sendTo(p, ip: "169.254.255.255", port: BEAT_PORT)
+        case let .unicast(p, ip, port): sendTo(p, ip: ip, port: port)
+        }
+    }
+    // Out of every link: a deck is on one of them.
+    func sendTo(_ packet: [UInt8], ip: String, port: UInt16) {
+        var to = sockaddr_in(); to.sin_family = sa_family_t(AF_INET); to.sin_port = port.bigEndian
+        inet_pton(AF_INET, ip, &to.sin_addr)
+        for (fd, _) in senders {
+            _ = packet.withUnsafeBytes { p in withUnsafePointer(to: &to) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sendto(fd, p.baseAddress, packet.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) } } }
+        }
+    }
+    // The page told when leading starts, gets the master role, or ends.
+    func tellPage() {
+        let now = (leader.number, leader.master)
+        guard now != told else { return }
+        told = now
+        var m: Message = ["type": "leading", "master": leader.master, "t": Int((Date().timeIntervalSince1970 * 1000).rounded())]
+        m["number"] = leader.number.map { Int($0) } ?? NSNull()
+        broadcast(m)
+        onChange()
     }
 
     func send(_ c: NWConnection, _ m: Message) {
@@ -636,6 +921,11 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let header = NSMenuItem(title: status(), action: nil, keyEquivalent: ""); header.isEnabled = false
         menu.addItem(header)
         for d in helper.players { let i = NSMenuItem(title: "   " + helper.line(for: d), action: nil, keyEquivalent: ""); i.isEnabled = false; menu.addItem(i) }
+        // Leading the decks, while the page carries on after they stop.
+        if let n = helper.leader.number {
+            let i = NSMenuItem(title: "   Sequent leading as player \(n)" + (helper.leader.master ? " · tempo master" : helper.leader.leading ? " · asking for master" : " · handing back"), action: nil, keyEquivalent: "")
+            i.isEnabled = false; menu.addItem(i)
+        }
         let pages = helper.clients.count
         let p = NSMenuItem(title: pages == 0 ? "No Sequent page connected" : "\(pages) Sequent page\(pages == 1 ? "" : "s") connected", action: nil, keyEquivalent: ""); p.isEnabled = false
         menu.addItem(p)
@@ -684,6 +974,82 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
 }
 
 // MARK: - Entry: --selftest decodes captured packets, as the tests do
+
+// --selftest-lead runs leading through its cases with made-up decks and
+// prints what it would send, one line each, for tools/check_lead.py; and
+// decodes our own status and beat packets with the decoder that reads the
+// real decks, so the offsets are checked against it.
+if CommandLine.arguments.contains("--selftest-lead") {
+    setvbuf(stdout, nil, _IONBF, 0)
+    let hex = { (p: [UInt8]) in p.map { String(format: "%02x", $0) }.joined() }
+    func show(_ o: Out) -> String {
+        switch o {
+        case let .announceAs(n): return "announce \(n)"
+        case let .status(p): return "status len=\(p.count) master=\(p[0x89] & 0x20 != 0 ? 1 : 0) playing=\(p[0x89] & 0x40 != 0 ? 1 : 0) synced=\(p[0x89] & 0x10 != 0 ? 1 : 0) Mm=\(p[0x9e]) Mh=\(String(format: "%02x", p[0x9f])) sync=\(u32(p, 0x84)) beat=\(u32(p, 0xa0))"
+        case let .beat(p): return "beat len=\(p.count) number=\(p[0x21]) inbar=\(p[0x5c]) bpm=\(u16(p, 0x5a)) next=\(u32(p, 0x24)) bar=\(u32(p, 0x2c))"
+        case let .unicast(p, ip, port): return "unicast \(ip):\(port) kind=\(String(format: "%02x", p[0x0a])) " + hex(Array(p[0x1f...]))
+        }
+    }
+    func run(_ name: String, _ steps: (Leader) -> Void) {
+        print("# " + name)
+        let l = Leader(); l.out = { print(show($0)) }
+        steps(l)
+    }
+    // A deck's status as a real deck would send it: master, handing over to whom, its sync counter.
+    func deck(_ n: UInt8, master: Bool, yieldingTo: UInt8 = 0xff, sync: Int = 3) -> [UInt8] {
+        statusPacket(number: n, playing: false, master: master, synced: true, handoff: yieldingTo, tempo: 124, beat: 0, beatInBar: 1, sync: sync, counter: 1)
+    }
+    let two: Players = [1: ("169.254.1.1", false, false, true), 2: ("169.254.2.2", false, false, true)]
+    run("nobody is master") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.tick(now: 0.2, players: two)
+        l.beatNow(beatInBar: 2)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: two, now: 1)
+        l.tick(now: 1.5, players: two)
+        l.tick(now: 2.2, players: two)
+    }
+    let oneMaster: Players = [1: ("169.254.1.1", true, false, true), 2: ("169.254.2.2", false, false, true)]
+    run("deck 1 is master and hands over") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
+        l.tick(now: 0.2, players: oneMaster)
+        l.status(deck(1, master: true, yieldingTo: 4))
+        l.tick(now: 0.4, players: oneMaster)
+        l.status(deck(1, master: false, sync: 5))
+        print("master \(l.master)")
+    }
+    run("deck 1 never answers, so it is asked again") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
+        l.tick(now: 1, players: oneMaster)
+        l.tick(now: 2.5, players: oneMaster)
+    }
+    run("deck 2 asks for master back") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.status(deck(2, master: false, sync: 7))
+        l.requested(by: 2, ip: "169.254.2.2")
+        l.tick(now: 0.2, players: two)
+        l.status(deck(2, master: true))
+        print("master \(l.master)")
+        l.tick(now: 0.4, players: two)
+    }
+    let synced: Players = [1: ("169.254.1.1", false, false, true), 2: ("169.254.2.2", false, true, true)]
+    run("the page stops with deck 2 playing in sync") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: synced, now: 0)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: synced, now: 1)
+        l.tick(now: 1.2, players: synced)
+        l.status(deck(2, master: true))
+        l.tick(now: 2.1, players: synced)
+    }
+    let full: Players = [1: ("a", false, false, false), 2: ("b", false, false, false), 3: ("c", false, false, false), 4: ("d", false, false, false)]
+    run("four decks: no number to lead as") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: full, now: 0)
+        l.tick(now: 0.2, players: full)
+        print("number \(l.number.map(String.init) ?? "none")")
+    }
+    print("# decoded")
+    print(String(decoding: json(parse(port: STATUS_PORT, statusPacket(number: 4, playing: true, master: true, synced: true, handoff: 0xff, tempo: 124.5, beat: 9, beatInBar: 3, sync: 2, counter: 1))!), as: UTF8.self))
+    print(String(decoding: json(parse(port: BEAT_PORT, beatPacket(number: 4, tempo: 124.5, beatInBar: 3))!), as: UTF8.self))
+    exit(0)
+}
 
 if CommandLine.arguments.contains("--selftest") {
     // Decode each file given as port:path and print it as the page would get it.

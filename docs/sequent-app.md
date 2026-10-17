@@ -15,8 +15,46 @@ people to install Python; the app replaced it and sends the page byte-for-byte
 the same messages, so the page didn't change. What they agreed on is pinned in
 `tools/fixtures/selftest.expected`, which `--selftest` must still reproduce.
 
-**It never sends the players anything that changes what they do.** It
-announces itself and it asks a deck's database questions. That's the line.
+**It sends the players nothing that changes what they do, unless the page
+asks it to lead.** It announces itself and asks a deck's database questions;
+and only while the page carries on after the decks stop, it leads them
+(below). That's the line.
+
+## Leading
+
+When the followed deck stops, the page carries on at its tempo and in its
+bar, and sends the app a `lead` message on every beat (docs/websocket.md).
+The app then leads the decks, so one with Sync on follows Sequent:
+
+- **It becomes a real player.** Players take a tempo master only from player
+  numbers 1 to 4 (beat-link insists on it too), so it announces as the
+  highest of those no deck is using, in place of 7, and goes back to 7 when
+  it's done. With four decks there's no number free, and it doesn't lead.
+- **It sends status and beats like a playing, synced CDJ**: status to every
+  player five times a second, and a beat packet, broadcast, as each of the
+  page's beats is heard (its own timer, a millisecond's leeway; measured
+  about 1.5 ms after the moment the page gave). The templates are the ones
+  beat-link sends, as facts of the protocol; offsets are Deep Symmetry's.
+- **It takes the master role** at once if nobody has it, else by asking the
+  master (a handoff request, 0x26, every two seconds until answered) and
+  taking it when that player's status names it in the handoff byte (0x9f).
+  A stopped master also hands over unasked to a synced, playing player.
+- **It gives the role back**: a player asking for it is answered (0x27, to
+  both ports, since Deep Symmetry's notes say 50001 and beat-link uses
+  50002) and named in our handoff byte, and when it asserts master we let
+  go, our sync counter one above the players'. When the page stops leading
+  it hands master to a player playing in sync, or just lets it go, and a
+  second later (four at most) announces as 7 again.
+- **Its own packets are dropped** on the way in, by source address, so it
+  never takes its own announcements and beats for a deck.
+
+The decisions are `Leader`, apart from the sockets and timers, and
+`--selftest-lead` runs it through its cases with made-up decks;
+`tools/check_lead.py` compares that with `tools/fixtures/lead.expected`, and
+decodes our own status and beat packets with the decoder that reads the real
+decks. The menu shows "Sequent leading as player 4 · tempo master" while it
+does. **Not yet tried with real decks**, and the Linux bridge doesn't lead:
+it ignores `lead`.
 
 ## The shape of it
 

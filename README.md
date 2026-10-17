@@ -43,7 +43,11 @@ what our own decks (two CDJ-3000Xs and a DJM-750MK2) showed, including the
 - Serves a WebSocket on `127.0.0.1:8795` to pages from turpin.studio, its
   https subdomains and localhost only.
 
-It never sends the players anything that changes what they do.
+It sends the players nothing that changes what they do, with one exception
+the page asks for: **leading** (Mac only, not yet released). When the page
+carries on after the decks stop, the app can become a player and take the
+tempo master role, so a deck with Sync on follows Sequent; see
+[docs/sequent-app.md](docs/sequent-app.md#leading).
 
 ## Installing
 

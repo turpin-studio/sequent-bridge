@@ -48,7 +48,10 @@ holds the same ports, so the two can't run on one machine.
 
 ## What Sequent.app sends
 
-Only two things, and neither changes what a deck does.
+Two things that change nothing a deck does, and, only while the page leads
+(Mac only, not yet tried with real decks), what a playing synced CDJ sends:
+status, beats and the master handoff. See
+[sequent-app.md](sequent-app.md#leading).
 
 ### Its announcement, as player 7
 
@@ -150,8 +153,9 @@ Deep Symmetry's dysentery), checked against our own recording on 11 October
 Some packets change what a deck does: fader start, channels on air, sync
 control and taking tempo master, loading a track, and loading settings. They
 are in Deep Symmetry's [mixer integration][mix], [sync][sync] and
-[loading tracks][load] notes. **None is in Sequent.app**, and none should be
-sent during a set unless the DJ asked for it.
+[loading tracks][load] notes. **Only taking tempo master is in Sequent.app**,
+when the page leads (above), and none should be sent during a set unless the
+DJ asked for it.
 
 Pressing Play on a deck from Sequent would be fader start, which Deep
 Symmetry note the CDJ-3000 doesn't support, so a 3000X probably won't

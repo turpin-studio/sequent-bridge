@@ -23,6 +23,7 @@ on:
     paths:
       - "helper/mac/**"
       - "tools/check_app.py"
+      - "tools/check_lead.py"
       - "tools/fixtures/**"
       - "Makefile"
       - "tools/check_dmg.sh"
@@ -110,6 +111,9 @@ jobs:
 
       - name: Check the app reads the CDJs as it should
         run: python3 tools/check_app.py build/Sequent.app
+
+      - name: Check the app leads the decks as it should
+        run: python3 tools/check_lead.py build/Sequent.app
 
       # The app first, so its ticket is stapled to it and travels in the disk
       # image, and it opens offline the first time. (The notary service takes

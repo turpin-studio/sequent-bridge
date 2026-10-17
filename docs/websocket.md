@@ -25,7 +25,8 @@ will keep working for apps that ask for nothing else.
   Anything else is refused before the upgrade (Linux answers 403, the Mac
   app 400), so a page on another site can't read what is playing. An allow
   list for other people's apps is planned.
-- **The app sends nothing.** The bridge reads only to notice a close.
+- **The app sends one thing, `lead`** (below), and only the Mac bridge acts
+  on it; otherwise the bridge reads only to notice a close.
 - Every message is one text frame of JSON, keys sorted, one object.
 - A browser asks before a public page reaches a local address (Chrome's
   local network access), so an app should connect only after the person has
@@ -128,6 +129,31 @@ second, so an app that logs them should expect the volume.
 | --- | --- | --- |
 | `port` | integer | the UDP port it came in on |
 | `kind` | integer | the packet's kind byte |
+
+## `leading`
+
+The bridge leading the decks for an app that asked (`lead`, below): sent
+when it starts, takes or loses the tempo master role, and stops. Mac only.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `number` | integer or null | the player number it leads as, `null` once it has stopped |
+| `master` | boolean | it holds the tempo master role |
+
+## From the app: `lead`
+
+While an app carries on after the decks stop, it may ask the bridge to lead
+them: on every beat, `{"type": "lead", "playing": true, "tempo": 124.0,
+"beat": 1, "beatAt": 1792251567994}`, and `{"type": "lead", "playing":
+false}` when it stops. The bridge becomes a player, takes the tempo master
+role and sends a beat packet at `beatAt`, so a deck with Sync on follows.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `playing` | boolean | lead, or stop leading |
+| `tempo` | number | the tempo, BPM |
+| `beat` | integer | this beat's place in the bar, 1 to 4 |
+| `beatAt` | number | when this beat is heard, milliseconds since 1970 |
 
 ## Changing it
 

@@ -1,0 +1,34 @@
+# nobody is master
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+beat len=96 number=4 inbar=2 bpm=12400 next=484 bar=1452
+status len=284 master=0 playing=0 synced=1 Mm=0 Mh=ff sync=1 beat=1
+announce 7
+# deck 1 is master and hands over
+announce 4
+unicast 169.254.1.1:50001 kind=26 010004000400000004
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+master true
+# deck 1 never answers, so it is asked again
+announce 4
+unicast 169.254.1.1:50001 kind=26 010004000400000004
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+unicast 169.254.1.1:50001 kind=26 010004000400000004
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+# deck 2 asks for master back
+announce 4
+unicast 169.254.2.2:50001 kind=27 01000400080000000400000001
+unicast 169.254.2.2:50002 kind=27 01000400080000000400000001
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=02 sync=1 beat=0
+master false
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=8 beat=0
+# the page stops with deck 2 playing in sync
+announce 4
+status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
+announce 7
+# four decks: no number to lead as
+number none
+# decoded
+{"bpm":124.5,"firmware":"1.43","master":true,"name":"sequent","number":4,"onAir":false,"pitch":0,"playing":true,"rekordboxId":1,"slot":3,"source":4,"sync":true,"trackNumber":1,"trackType":1,"type":"status"}
+{"beat":3,"bpm":124.5,"name":"sequent","nextBarMs":964,"nextBeatMs":482,"number":4,"pitch":0,"tempo":124.5,"type":"beat"}

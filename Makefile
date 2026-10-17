@@ -4,7 +4,8 @@
 .PHONY: test app dmg image deb record replay
 
 # The Linux bridge's self-test, and the recording replayer's tests. The Mac
-# app's self-test needs a build: make app && python3 tools/check_app.py build/Sequent.app
+# app's self-tests need a build: make app && python3 tools/check_app.py build/Sequent.app
+# && python3 tools/check_lead.py build/Sequent.app
 test:
 	@python3 tools/check_app.py helper/linux/sequent
 	@python3 -m unittest discover -s tests
