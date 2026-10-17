@@ -259,7 +259,7 @@ final class Leader {
                 number = UInt8(n)
                 out(.announceAs(UInt8(n)))
             }
-            if !leading { leading = true; claim(players, now: now) }
+            if !leading { leading = true; claim(players, now: now, ask: false) }
         } else if leading {
             leading = false
             stoppedAt = now
@@ -270,15 +270,19 @@ final class Leader {
     }
 
     // Take the master role: at once if nobody has it, else ask the master,
-    // and again every two seconds until it hands over.
+    // and again every two seconds until it hands over. A deck ignores a
+    // request from a player it hasn't yet had status from (seen with a
+    // CDJ-3000X on 17 October 2026), so the first is asked only once our
+    // status has been going for a little while; a stopped master often hands
+    // over unasked by then anyway.
     private var claimedAt = 0.0
-    private func claim(_ players: Players, now: Double) {
+    private func claim(_ players: Players, now: Double, ask: Bool = true) {
         guard let number, !master else { return }
+        guard let (n, p) = players.first(where: { $0.value.master && $0.key != Int(number) }) else { master = true; asked = 0; return }
+        guard ask else { claimedAt = now - 1.6; return }
         claimedAt = now
-        if let (n, p) = players.first(where: { $0.value.master && $0.key != Int(number) }) {
-            asked = n
-            out(.unicast(handoffRequest(number: number), ip: p.ip, port: BEAT_PORT))
-        } else { master = true; asked = 0 }
+        asked = n
+        out(.unicast(handoffRequest(number: number), ip: p.ip, port: BEAT_PORT))
     }
 
     // A beat of ours, as the page plays it.
@@ -488,7 +492,7 @@ final class Helper {
     // about it.
     let leader = Leader()
     var playerNumber = VIRTUAL_PLAYER
-    var leadTimer: Timer?
+    var leadTimer: DispatchSourceTimer?
     var told: (UInt8?, Bool) = (nil, false)
     let listenOnly = CommandLine.arguments.contains("--listen-only")
     // `--capture DIR`: keep each deck's raw status packet whenever the bytes
@@ -744,13 +748,20 @@ final class Helper {
                 t.resume()
             }
         }
+        // A dispatch timer, not a run-loop one: scheduled from this callback,
+        // a Timer wasn't noticed until the run loop next woke, and our status
+        // started three seconds late (17 October 2026, on the rig).
         if leader.number != nil, leadTimer == nil {
-            leadTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            let t = DispatchSource.makeTimerSource(queue: .main)
+            t.schedule(deadline: .now(), repeating: .milliseconds(200), leeway: .milliseconds(5))
+            t.setEventHandler { [weak self] in
                 guard let self else { return }
                 self.leader.tick(now: Date().timeIntervalSince1970, players: self.playerStates)
-                if self.leader.number == nil { self.leadTimer?.invalidate(); self.leadTimer = nil }
+                if self.leader.number == nil { self.leadTimer?.cancel(); self.leadTimer = nil }
                 self.tellPage()
             }
+            t.resume()
+            leadTimer = t
         }
         tellPage()
     }
@@ -1009,9 +1020,10 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.tick(now: 2.2, players: two)
     }
     let oneMaster: Players = [1: ("169.254.1.1", true, false, true), 2: ("169.254.2.2", false, false, true)]
-    run("deck 1 is master and hands over") { l in
+    run("deck 1 is master: asked once our status has gone out, it hands over") { l in
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
         l.tick(now: 0.2, players: oneMaster)
+        l.tick(now: 0.6, players: oneMaster)
         l.status(deck(1, master: true, yieldingTo: 4))
         l.tick(now: 0.4, players: oneMaster)
         l.status(deck(1, master: false, sync: 5))
@@ -1019,8 +1031,16 @@ if CommandLine.arguments.contains("--selftest-lead") {
     }
     run("deck 1 never answers, so it is asked again") { l in
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
-        l.tick(now: 1, players: oneMaster)
-        l.tick(now: 2.5, players: oneMaster)
+        l.tick(now: 0.6, players: oneMaster)
+        l.tick(now: 1.6, players: oneMaster)
+        l.tick(now: 2.8, players: oneMaster)
+    }
+    run("a stopped master hands over unasked as soon as it sees our status") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
+        l.tick(now: 0.2, players: oneMaster)
+        l.status(deck(1, master: true, yieldingTo: 4))
+        l.tick(now: 0.4, players: oneMaster)
+        l.tick(now: 3, players: oneMaster)
     }
     run("deck 2 asks for master back") { l in
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)

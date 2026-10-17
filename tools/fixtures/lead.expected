@@ -4,8 +4,9 @@ status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
 beat len=96 number=4 inbar=2 bpm=12400 next=484 bar=1452
 status len=284 master=0 playing=0 synced=1 Mm=0 Mh=ff sync=1 beat=1
 announce 7
-# deck 1 is master and hands over
+# deck 1 is master: asked once our status has gone out, it hands over
 announce 4
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
 unicast 169.254.1.1:50001 kind=26 010004000400000004
 status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
 status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
@@ -14,8 +15,14 @@ master true
 announce 4
 unicast 169.254.1.1:50001 kind=26 010004000400000004
 status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
 unicast 169.254.1.1:50001 kind=26 010004000400000004
 status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+# a stopped master hands over unasked as soon as it sees our status
+announce 4
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
 # deck 2 asks for master back
 announce 4
 unicast 169.254.2.2:50001 kind=27 01000400080000000400000001

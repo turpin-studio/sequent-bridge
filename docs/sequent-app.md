@@ -53,8 +53,20 @@ The decisions are `Leader`, apart from the sockets and timers, and
 `tools/check_lead.py` compares that with `tools/fixtures/lead.expected`, and
 decodes our own status and beat packets with the decoder that reads the real
 decks. The menu shows "Sequent leading as player 4 · tempo master" while it
-does. **Not yet tried with real decks**, and the Linux bridge doesn't lead:
-it ignores `lead`.
+does. The Linux bridge doesn't lead: it ignores `lead`.
+
+**On the rig, 17 October 2026** (one CDJ-3000X, firmware 1.40, recorded in
+`tools/recordings/lead-test-2026-10-17-en8.pcap`): with the deck cued, the
+master, Sequent led as player 4 and the deck handed it master within 20 ms
+of seeing its status, unasked. Played with Sync on, the deck followed:
+every beat on Sequent's beat in the bar, within 8 ms, its tempo settling
+from its own track's 120 to Sequent's 122.95 BPM. When the page followed the
+deck again, Sequent named it in the handoff byte and it took master 37 ms
+later. Two things learned: our status started three seconds late, its
+run-loop timer scheduled from a WebSocket callback going unnoticed until the
+run loop next woke, so it's a dispatch timer now; and the deck ignored a
+handoff request sent before it had had any status from player 4, so the
+request now waits for our status to be going.
 
 ## The shape of it
 
