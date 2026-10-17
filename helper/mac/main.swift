@@ -244,12 +244,14 @@ final class Leader {
     private var asked = 0                           // the player we asked for master
     private var sync = 1, largestSync = 0, counter = 0
     private var stoppedAt: Double? = nil
+    private var heardAt = 0.0                       // when the page last said lead
     var out: (Out) -> Void = { _ in }
 
     // The page says lead, at this tempo, on this beat of the bar; `players`
     // are the decks seen lately with their statuses.
     func lead(playing: Bool, tempo: Double, beatInBar: Int, players: Players, now: Double) {
         if playing {
+            heardAt = now
             if tempo > 0 { self.tempo = tempo }
             if (1...4).contains(beatInBar) { self.beatInBar = beatInBar }
             stoppedAt = nil
@@ -297,6 +299,8 @@ final class Leader {
     // role is given up a second after the page stops, if nobody took it.
     func tick(now: Double, players: Players) {
         guard let number else { return }
+        // A page that has gone quiet (closed, or asleep) stops leading.
+        if leading, now - heardAt > 2 { lead(playing: false, tempo: 0, beatInBar: beatInBar, players: players, now: now) }
         if leading, !master, now - claimedAt > 2 { claim(players, now: now) }
         if !leading, let at = stoppedAt, now - at > 1, next == 0xff || now - at > 4 {
             master = false
@@ -322,6 +326,19 @@ final class Leader {
             if from == next { sync = largestSync + 1 }
             master = false; next = 0xff
         }
+    }
+
+    // Quitting while we lead: a last status saying we've stopped and aren't
+    // master, so no deck is left with a master that vanished. (A copy that
+    // quit as master on 17 October 2026 left the CDJ-3000X sending its
+    // status to nobody until it was replugged.)
+    func leave() {
+        guard let number else { return }
+        counter += 1
+        let last = statusPacket(number: number, playing: false, master: false, synced: false, handoff: 0xff, tempo: tempo, beat: beat, beatInBar: beatInBar, sync: sync, counter: counter)
+        out(.status(last)); out(.status(last))
+        leading = false; master = false; self.number = nil
+        out(.announceAs(VIRTUAL_PLAYER))
     }
 
     // A player asking us for master: agree, and name it as the next master.
@@ -850,6 +867,9 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // asked once then, not on every refresh.
     var rekordbox = false
 
+    // Quitting while leading hands the role back first.
+    func applicationWillTerminate(_ n: Notification) { helper.leader.leave() }
+
     func applicationDidFinishLaunching(_ n: Notification) {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         let menu = NSMenu(); menu.delegate = self; item.menu = menu
@@ -1033,6 +1053,7 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
         l.tick(now: 0.6, players: oneMaster)
         l.tick(now: 1.6, players: oneMaster)
+        l.lead(playing: true, tempo: 124, beatInBar: 2, players: oneMaster, now: 2.5)
         l.tick(now: 2.8, players: oneMaster)
     }
     run("a stopped master hands over unasked as soon as it sees our status") { l in
@@ -1040,6 +1061,7 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.tick(now: 0.2, players: oneMaster)
         l.status(deck(1, master: true, yieldingTo: 4))
         l.tick(now: 0.4, players: oneMaster)
+        l.lead(playing: true, tempo: 124, beatInBar: 2, players: oneMaster, now: 2.5)
         l.tick(now: 3, players: oneMaster)
     }
     run("deck 2 asks for master back") { l in
@@ -1058,6 +1080,17 @@ if CommandLine.arguments.contains("--selftest-lead") {
         l.tick(now: 1.2, players: synced)
         l.status(deck(2, master: true))
         l.tick(now: 2.1, players: synced)
+    }
+    run("the page goes quiet, so leading stops") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.tick(now: 1, players: two)
+        l.tick(now: 2.5, players: two)
+        l.tick(now: 3.7, players: two)
+    }
+    run("quitting while leading says so first") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.leave()
+        print("number \(l.number.map(String.init) ?? "none")")
     }
     let full: Players = [1: ("a", false, false, false), 2: ("b", false, false, false), 3: ("c", false, false, false), 4: ("d", false, false, false)]
     run("four decks: no number to lead as") { l in

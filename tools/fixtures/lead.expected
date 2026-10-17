@@ -34,6 +34,17 @@ status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=8 beat=0
 announce 4
 status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
 announce 7
+# the page goes quiet, so leading stops
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=0 synced=1 Mm=0 Mh=ff sync=1 beat=0
+announce 7
+# quitting while leading says so first
+announce 4
+status len=284 master=0 playing=0 synced=0 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=0 synced=0 Mm=0 Mh=ff sync=1 beat=0
+announce 7
+number none
 # four decks: no number to lead as
 number none
 # decoded

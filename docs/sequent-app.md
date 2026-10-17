@@ -66,7 +66,11 @@ later. Two things learned: our status started three seconds late, its
 run-loop timer scheduled from a WebSocket callback going unnoticed until the
 run loop next woke, so it's a dispatch timer now; and the deck ignored a
 handoff request sent before it had had any status from player 4, so the
-request now waits for our status to be going.
+request now waits for our status to be going. A copy quit while it held master
+left the deck sending its status to nobody until it was replugged, so
+quitting while leading now sends a last status, stopped and not master,
+before announcing as 7 again; and a page gone quiet for two seconds (closed,
+asleep) stops the leading as if it had said so.
 
 ## The shape of it
 
