@@ -77,13 +77,6 @@ can run beside a real one), and `make record` captures your own.
 [docs/sequent-app.md](docs/sequent-app.md) explains how the Mac app is put
 together and why.
 
-## Where this is going
-
-Sequent is meant to be the one bridge for several apps, a full sequencer
-among them, and perhaps for more than one brand of gear (Denon's StageLinQ).
-Version 1 of the messages is shaped around Pro DJ Link; a brand-neutral
-version 2 will sit beside it when a second protocol arrives.
-
 ## Licence
 
 [Eclipse Public License 2.0](LICENSE), as beat-link uses. Apps that only talk
