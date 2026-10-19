@@ -164,9 +164,7 @@ Deep Symmetry's dysentery), checked against our own recording on 11 October
 - **Absolute position** (beat port 50001, type `0x0b`, 60 bytes): track
   length, playhead in milliseconds, pitch and tempo. A CDJ-3000X sends one
   about every 30 ms: 3,971 of them in our two-minute recording, against 211
-  beat packets. Sequent reads only the beats. Position would let it follow
-  cue jumps, loops and platter nudges at once, and let the stems page lock
-  to the deck's playhead when the same tune is loaded on it.
+  beat packets. Sequent reads only the beats.
 - **Master Tempo** (status `0x158`, off or on). With it off, the pitch fader
   moves the key too, which the key Sequent follows doesn't allow for: at +6%
   the deck is a semitone above it.
@@ -189,9 +187,8 @@ are in Deep Symmetry's [mixer integration][mix], [sync][sync] and
 when the page leads (above), and none should be sent during a set unless the
 DJ asked for it.
 
-Pressing Play on a deck from Sequent would be fader start, which Deep
-Symmetry note the CDJ-3000 doesn't support, so a 3000X probably won't
-either. Untried.
+Deep Symmetry note the CDJ-3000 doesn't support fader start, so a 3000X
+probably doesn't either. Untried.
 
 [mix]: https://djl-analysis.deepsymmetry.org/djl-analysis/mixer_integration.html
 [load]: https://djl-analysis.deepsymmetry.org/djl-analysis/loading_tracks.html

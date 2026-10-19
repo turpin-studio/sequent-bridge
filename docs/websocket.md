@@ -3,9 +3,7 @@
 What Sequent.app and Sequent for Linux send to the apps that connect to them,
 written down on 12 October 2026 as it already was, so that apps other than
 the instruments page can rely on it. This is **version 1**: the messages as
-they are, shaped around Pro DJ Link. A brand-neutral version 2 will be added
-beside it when a second protocol (Denon's StageLinQ) arrives, and version 1
-will keep working for apps that ask for nothing else.
+they are, shaped around Pro DJ Link.
 
 `helper/mac/main.swift` and `helper/linux/sequent` are the reference;
 `tools/fixtures/selftest.expected` pins the decoding both must agree on.
@@ -23,8 +21,7 @@ will keep working for apps that ask for nothing else.
     is refused. The Mac app has this from the release after 0.3.1.
 
   Anything else is refused before the upgrade (Linux answers 403, the Mac
-  app 400), so a page on another site can't read what is playing. An allow
-  list for other people's apps is planned.
+  app 400), so a page on another site can't read what is playing.
 - **The app sends one thing, `lead`** (below), and only the Mac bridge acts
   on it; otherwise the bridge reads only to notice a close.
 - Every message is one text frame of JSON, keys sorted, one object.
