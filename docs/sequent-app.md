@@ -220,6 +220,17 @@ turpin-studio/sequent-apple, `SequentCore/Forward.swift`). `forwarded()`
 reads it and `handle()` takes it from there exactly as a deck's own packet,
 the deck's address and all.
 
+Each packet is stamped when the phone heard it plus the baseline: the
+smallest delay (arrival less heard) of the last ten seconds, which is the
+quickest the network goes plus the difference between the two clocks. That
+takes the Wi-Fi's uneven delay out of the beats' timing. How far packets
+land behind the baseline is the Wi-Fi's own delay, with no clock in it: its
+typical and 95th-percentile figures are in the menu ("Via iPhone over
+Wi-Fi"), the log, and a `forwarding` message to the page every two seconds.
+`SEQUENT_RAW_FORWARD=1` stamps packets on arrival instead, to compare. A
+deck this Mac also hears directly isn't taken from a phone: the copies
+would arrive too late to be dropped as copies and double its beats.
+
 Unicast to an address Bonjour found needs Local Network access only, not
 Apple's multicast entitlement. What doesn't come through: leading, which
 needs the decks to hear this Mac, and track details, which the Mac would

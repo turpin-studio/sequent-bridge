@@ -5,7 +5,7 @@
 
 # The Linux bridge's self-test, and the recording replayer's tests. The Mac
 # app's self-tests need a build: make app && python3 tools/check_app.py build/Sequent.app
-# && python3 tools/check_lead.py build/Sequent.app
+# && python3 tools/check_lead.py build/Sequent.app && python3 tools/check_forward.py build/Sequent.app
 test:
 	@python3 tools/check_app.py helper/linux/sequent
 	@python3 -m unittest discover -s tests

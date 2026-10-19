@@ -223,9 +223,22 @@ func beatPacket(number: UInt8, tempo: Double, beatInBar: Int) -> [UInt8] {
 // A packet a phone passed on: "SQFW", version 1, the port (2 bytes), the
 // deck's address (4), when the phone heard it (8, milliseconds since 1970),
 // then the packet; nil for anything else. As SequentCore's Forward.encode.
-func forwarded(_ d: [UInt8]) -> (port: UInt16, source: [UInt8], packet: [UInt8])? {
+func forwarded(_ d: [UInt8]) -> (port: UInt16, source: [UInt8], heardMs: Double, packet: [UInt8])? {
     guard d.count > 19, Array(d.prefix(4)) == Array("SQFW".utf8), d[4] == 1 else { return nil }
-    return (UInt16(d[5]) << 8 | UInt16(d[6]), Array(d[7..<11]), Array(d[19...]))
+    let ms = d[11..<19].reduce(UInt64(0)) { $0 << 8 | UInt64($1) }
+    return (UInt16(d[5]) << 8 | UInt16(d[6]), Array(d[7..<11]), Double(ms), Array(d[19...]))
+}
+
+// How a phone's packets travel, from each one's delay: when it arrived here
+// less when the phone heard it, in milliseconds. That mixes the network with
+// the two clocks' difference, but the smallest lately (the baseline) is the
+// quickest the network goes plus that difference, and how far each lands
+// behind it is the Wi-Fi's own delay, with no clock in it. Nil for none.
+func hopStats(_ delays: [Double]) -> (base: Double, median: Double, p95: Double)? {
+    guard let base = delays.min() else { return nil }
+    let behind = delays.map { $0 - base }.sorted()
+    let at = { (q: Double) in behind[min(behind.count - 1, Int((q * Double(behind.count - 1)).rounded()))] }
+    return (base, at(0.5), at(0.95))
 }
 
 // Asking the master to hand over (0x26), and agreeing to hand over (0x27).
@@ -579,6 +592,15 @@ final class Helper {
     // hear this Mac, so it doesn't reach them this way.
     var forwardListener: NWListener?
     var forwardedCount = 0
+    // The delays of the last ten seconds' packets (arrival less heard), and
+    // what they say: shown in the menu, logged, and told to the page.
+    var hops: [(at: Double, delay: Double)] = []
+    var hopSummary: (base: Double, median: Double, p95: Double)?
+    var hopsTold = 0.0
+    // Stamping a forwarded packet when the phone heard it, plus the
+    // baseline, takes the Wi-Fi's uneven delay out of the beats' timing;
+    // SEQUENT_RAW_FORWARD=1 stamps them on arrival instead, to compare.
+    let correctForwarded = ProcessInfo.processInfo.environment["SEQUENT_RAW_FORWARD"] == nil
     func listenForPhones() {
         let l: NWListener
         do { l = try NWListener(using: .udp) }
@@ -595,12 +617,29 @@ final class Helper {
     func readForwarded(_ c: NWConnection) {
         c.receiveMessage { [weak self] data, _, _, error in
             guard let self, error == nil else { c.cancel(); return }
-            if let data, let (port, source, packet) = forwarded(Array(data)) {
+            if let data, let (port, source, heard, packet) = forwarded(Array(data)),
+               Date().timeIntervalSince1970 - (self.direct[source] ?? 0) > 3 {
                 self.forwardedCount += 1
-                self.handle(packet, port: port, source: source)
+                let arrived = Date().timeIntervalSince1970 * 1000
+                self.hops.append((arrived, arrived - heard))
+                self.hops.removeAll { arrived - $0.at > 10_000 }
+                let base = self.hops.map(\.delay).min() ?? 0
+                self.handle(packet, port: port, source: source, at: self.correctForwarded ? (heard + base) / 1000 : nil)
+                if arrived - self.hopsTold > 2000 { self.hopsTold = arrived; self.tellHops() }
             }
             self.readForwarded(c)
         }
+    }
+
+    // Every couple of seconds: the figures to the menu, the log and the page.
+    func tellHops() {
+        guard let h = hopStats(hops.map(\.delay)) else { return }
+        hopSummary = h
+        let line = String(format: "via iPhone over Wi-Fi: Wi-Fi delay %.0f ms typical, %.0f ms at worst (95%%), baseline %.0f ms", h.median, h.p95, h.base)
+        FileHandle.standardError.write(Data("Sequent: \(line)\(correctForwarded ? "" : " (not corrected)")\n".utf8))
+        broadcast(["type": "forwarding", "baseMs": (h.base * 10).rounded() / 10, "medianMs": (h.median * 10).rounded() / 10,
+                   "p95Ms": (h.p95 * 10).rounded() / 10, "packets": forwardedCount, "corrected": correctForwarded])
+        onChange()
     }
 
     func bindPorts() {
@@ -654,13 +693,19 @@ final class Helper {
         var from = sockaddr_in(); var len = socklen_t(MemoryLayout<sockaddr_in>.size)
         let n = withUnsafeMutablePointer(to: &from) { f in f.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(fd, &buf, buf.count, 0, $0, &len) } }
         guard n > 0 else { return }
-        handle(Array(buf[0..<n]), port: port, source: withUnsafeBytes(of: from.sin_addr.s_addr) { Array($0) })
+        let source = withUnsafeBytes(of: from.sin_addr.s_addr) { Array($0) }
+        direct[source] = Date().timeIntervalSince1970
+        handle(Array(buf[0..<n]), port: port, source: source)
     }
+    // When each deck was last heard on this Mac's own links: one heard
+    // directly isn't taken from a phone too (forwarded copies arrive too late
+    // to be dropped as copies, and would double its beats).
+    var direct: [[UInt8]: Double] = [:]
 
     // A packet from a deck: off the decks' own link, or passed on by a phone
     // on it (forwarded(), below), with the deck's address either way.
-    func handle(_ packet: [UInt8], port: UInt16, source: [UInt8]) {
-        let now = Date().timeIntervalSince1970
+    func handle(_ packet: [UInt8], port: UInt16, source: [UInt8], at: Double? = nil) {
+        let now = at ?? Date().timeIntervalSince1970
         // Our own announcements, status and beats come back to us: not a deck.
         if linkList.contains(where: { $0.ip == source }) { return }
         // Each packet arrives once per USB link: drop the copy seen moments ago.
@@ -1011,6 +1056,10 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
             i.isEnabled = false; menu.addItem(i)
         }
         let pages = helper.clients.count
+        if let h = helper.hopSummary, Date().timeIntervalSince1970 * 1000 - helper.hopsTold < 10_000 {
+            let i = NSMenuItem(title: String(format: "   Via iPhone over Wi-Fi: %.0f ms typical, %.0f ms at worst", h.median, h.p95), action: nil, keyEquivalent: "")
+            i.isEnabled = false; menu.addItem(i)
+        }
         let p = NSMenuItem(title: pages == 0 ? "No Sequent page connected" : "\(pages) Sequent page\(pages == 1 ? "" : "s") connected", action: nil, keyEquivalent: ""); p.isEnabled = false
         menu.addItem(p)
         menu.addItem(.separator())
@@ -1239,6 +1288,18 @@ if CommandLine.arguments.contains("--selftest-lead") {
     print("# decoded")
     print(String(decoding: json(parse(port: STATUS_PORT, statusPacket(number: 4, playing: true, master: true, synced: true, handoff: 0xff, tempo: 124.5, beat: 9, beatInBar: 3, sync: 2, counter: 1))!), as: UTF8.self))
     print(String(decoding: json(parse(port: BEAT_PORT, beatPacket(number: 4, tempo: 124.5, beatInBar: 3))!), as: UTF8.self))
+    exit(0)
+}
+
+// --selftest-forward checks reading a phone's packets and the delay figures,
+// for tools/check_forward.py.
+if CommandLine.arguments.contains("--selftest-forward") {
+    let d: [UInt8] = Array("SQFW".utf8) + [1, 0xc3, 0x51, 169, 254, 11, 117] + [0, 0, 1, 0x9a, 0x1b, 0x7c, 0x2a, 0x3b] + Array("Qspt1WmJOL".utf8) + [0x28]
+    if let f = forwarded(d) { print("forwarded port=\(f.port) from=\(f.source.map(String.init).joined(separator: ".")) heard=\(Int(f.heardMs)) bytes=\(f.packet.count)") }
+    print("refused \(forwarded(Array("hello world, not ours".utf8)) == nil) \(forwarded(Array(d.prefix(19))) == nil)")
+    for delays in [[40.0, 52, 41, 47, 90, 40.5, 43, 44, 45, 46, 60, 42, 41, 48, 49, 50, 51, 43, 44, 45], [5.0], [Double]()] {
+        if let h = hopStats(delays) { print(String(format: "hops base=%.1f median=%.1f p95=%.1f", h.base, h.median, h.p95)) } else { print("hops none") }
+    }
     exit(0)
 }
 
