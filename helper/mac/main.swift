@@ -220,6 +220,14 @@ func beatPacket(number: UInt8, tempo: Double, beatInBar: Int) -> [UInt8] {
     return p
 }
 
+// A packet a phone passed on: "SQFW", version 1, the port (2 bytes), the
+// deck's address (4), when the phone heard it (8, milliseconds since 1970),
+// then the packet; nil for anything else. As SequentCore's Forward.encode.
+func forwarded(_ d: [UInt8]) -> (port: UInt16, source: [UInt8], packet: [UInt8])? {
+    guard d.count > 19, Array(d.prefix(4)) == Array("SQFW".utf8), d[4] == 1 else { return nil }
+    return (UInt16(d[5]) << 8 | UInt16(d[6]), Array(d[7..<11]), Array(d[19...]))
+}
+
 // Asking the master to hand over (0x26), and agreeing to hand over (0x27).
 func handoffRequest(number: UInt8) -> [UInt8] { header(0x26) + [0x01, 0x00, number, 0x00, 0x04, 0x00, 0x00, 0x00, number] }
 func handoffResponse(number: UInt8) -> [UInt8] { header(0x27) + [0x01, 0x00, number, 0x00, 0x08, 0x00, 0x00, 0x00, number, 0x00, 0x00, 0x00, 0x01] }
@@ -549,6 +557,7 @@ final class Helper {
         leader.out = { [weak self] o in self?.emit(o) }
         bindPorts()
         serve()
+        listenForPhones()
         // Retry the ports while something else holds them, look for new links,
         // and announce, on a timer.
         // Tolerance lets macOS fold these wake-ups in with others.
@@ -559,6 +568,39 @@ final class Helper {
         }.tolerance = 0.2
         Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.refreshLinks() }.tolerance = 2
         refreshLinks()
+    }
+
+    // Packets passed on by a phone on the decks' link (the iPhone app's
+    // Forwarder): Bonjour advertises `_sequent._udp`, and each datagram is
+    // one packet with a header saying the port it came to, the deck it came
+    // from and when (the format is in turpin-studio/sequent-apple,
+    // SequentCore/Forward.swift). They're handled as the decks' own, so the
+    // page follows decks this Mac isn't wired to. Leading needs the decks to
+    // hear this Mac, so it doesn't reach them this way.
+    var forwardListener: NWListener?
+    var forwardedCount = 0
+    func listenForPhones() {
+        let l: NWListener
+        do { l = try NWListener(using: .udp) }
+        catch { FileHandle.standardError.write(Data("Sequent: can't listen for phones: \(error)\n".utf8)); return }
+        l.service = NWListener.Service(name: Host.current().localizedName ?? "Sequent", type: "_sequent._udp")
+        l.newConnectionHandler = { [weak self] c in
+            c.start(queue: .main)
+            self?.readForwarded(c)
+        }
+        l.stateUpdateHandler = { state in FileHandle.standardError.write(Data("Sequent: listening for phones (_sequent._udp) \(state)\n".utf8)) }
+        l.start(queue: .main)
+        forwardListener = l
+    }
+    func readForwarded(_ c: NWConnection) {
+        c.receiveMessage { [weak self] data, _, _, error in
+            guard let self, error == nil else { c.cancel(); return }
+            if let data, let (port, source, packet) = forwarded(Array(data)) {
+                self.forwardedCount += 1
+                self.handle(packet, port: port, source: source)
+            }
+            self.readForwarded(c)
+        }
     }
 
     func bindPorts() {
@@ -612,9 +654,14 @@ final class Helper {
         var from = sockaddr_in(); var len = socklen_t(MemoryLayout<sockaddr_in>.size)
         let n = withUnsafeMutablePointer(to: &from) { f in f.withMemoryRebound(to: sockaddr.self, capacity: 1) { recvfrom(fd, &buf, buf.count, 0, $0, &len) } }
         guard n > 0 else { return }
-        let packet = Array(buf[0..<n]), now = Date().timeIntervalSince1970
+        handle(Array(buf[0..<n]), port: port, source: withUnsafeBytes(of: from.sin_addr.s_addr) { Array($0) })
+    }
+
+    // A packet from a deck: off the decks' own link, or passed on by a phone
+    // on it (forwarded(), below), with the deck's address either way.
+    func handle(_ packet: [UInt8], port: UInt16, source: [UInt8]) {
+        let now = Date().timeIntervalSince1970
         // Our own announcements, status and beats come back to us: not a deck.
-        let source = withUnsafeBytes(of: from.sin_addr.s_addr) { Array($0) }
         if linkList.contains(where: { $0.ip == source }) { return }
         // Each packet arrives once per USB link: drop the copy seen moments ago.
         let key = Data(packet)
@@ -628,11 +675,8 @@ final class Helper {
             tellPage()
         }
         guard var msg = parse(port: port, packet) else { return }
-        var ip = from.sin_addr
-        var str = [CChar](repeating: 0, count: 16)
-        inet_ntop(AF_INET, &ip, &str, 16)
         msg["t"] = Int((now * 1000).rounded())
-        msg["from"] = String(cString: str)
+        msg["from"] = source.map(String.init).joined(separator: ".")
         let number = msg["number"] as? Int ?? 0
         if msg["type"] as? String == "device" {
             let known = devices[number]

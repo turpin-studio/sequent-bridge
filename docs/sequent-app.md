@@ -208,6 +208,30 @@ A and major keys from C. It needs no database lookup, so it works whether or
 not the track's identity is known. Confirmed with the decks on 8 October
 2026; `status-deck1-keyshift.bin` is a capture with a Key Shift of −200.
 
+## Passed on by a phone
+
+Sequent on an iPhone, on the decks' link by a USB-C cable to a CDJ, can pass
+every Pro DJ Link packet it hears to Sequent.app over Wi-Fi, so the page on
+a Mac follows decks the Mac isn't wired to. The app advertises
+`_sequent._udp` by Bonjour; the phone finds it and sends each packet as one
+datagram: `SQFW`, version 1, the port it arrived on, the deck's address,
+when the phone heard it, then the packet as it was (the format is in
+turpin-studio/sequent-apple, `SequentCore/Forward.swift`). `forwarded()`
+reads it and `handle()` takes it from there exactly as a deck's own packet,
+the deck's address and all.
+
+Unicast to an address Bonjour found needs Local Network access only, not
+Apple's multicast entitlement. What doesn't come through: leading, which
+needs the decks to hear this Mac, and track details, which the Mac would
+ask the deck for over a link it isn't on. Wi-Fi delays packets unevenly, so
+beats arrive less evenly than over a cable; the page's jitter graph shows
+by how much. Only the Mac app listens; the Linux bridge doesn't yet.
+
+Tested on 19 October 2026 with the iPhone app in the simulator, a recording
+replayed into it on moved ports and forwarding on: the app's WebSocket
+carried the deck's announcement, beats and status, and with the iPhone app
+closed, nothing.
+
 ## The WebSocket
 
 One `NWListener` on 127.0.0.1:8795, with two independent locks:
