@@ -1,5 +1,7 @@
 forwarded port=50001 from=169.254.11.117 heard=1761397713467 bytes=11
 refused true true
+sync offset=30000000 roundTrip=16000000; uneven offset=24000000 roundTrip=16000000
+pong 7 8 9
 hops base=40.0 median=5.0 p95=20.0
 hops base=5.0 median=0.0 p95=0.0
 hops none

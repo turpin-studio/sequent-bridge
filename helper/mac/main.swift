@@ -229,6 +229,24 @@ func forwarded(_ d: [UInt8]) -> (port: UInt16, source: [UInt8], heardMs: Double,
     return (UInt16(d[5]) << 8 | UInt16(d[6]), Array(d[7..<11]), Double(ms), Array(d[19...]))
 }
 
+// Keeping a phone's clock and this Mac's together, NTP's way: a ping with
+// our time (t1), the phone's answer with t1, when it got it (t2) and sent
+// the answer (t3), and when that came (t4), all nanoseconds since 1970 on
+// each one's own clock. The offset is the phone's clock less ours; the
+// answer with the shortest round trip lately says it best. As SequentCore's
+// Forward.ping, .pong and .sync.
+func pingPacket(_ t1: UInt64) -> [UInt8] { Array("SQPI".utf8) + [1] + (0..<8).map { UInt8(truncatingIfNeeded: t1 >> (8 * (7 - $0))) } }
+func pongTimes(_ d: [UInt8]) -> (t1: UInt64, t2: UInt64, t3: UInt64)? {
+    guard d.count == 29, Array(d.prefix(4)) == Array("SQPO".utf8), d[4] == 1 else { return nil }
+    let at = { (i: Int) in d[i..<i + 8].reduce(UInt64(0)) { $0 << 8 | UInt64($1) } }
+    return (at(5), at(13), at(21))
+}
+func clockSync(t1: UInt64, t2: UInt64, t3: UInt64, t4: UInt64) -> (offset: Int64, roundTrip: Int64) {
+    let (a, b, c, d) = (Int64(bitPattern: t1), Int64(bitPattern: t2), Int64(bitPattern: t3), Int64(bitPattern: t4))
+    return (((b - a) + (c - d)) / 2, (d - a) - (c - b))
+}
+func nowNs() -> UInt64 { UInt64(max(0, Date().timeIntervalSince1970 * 1e9)) }
+
 // How a phone's packets travel, from each one's delay: when it arrived here
 // less when the phone heard it, in milliseconds. That mixes the network with
 // the two clocks' difference, but the smallest lately (the baseline) is the
@@ -601,14 +619,33 @@ final class Helper {
     // baseline, takes the Wi-Fi's uneven delay out of the beats' timing;
     // SEQUENT_RAW_FORWARD=1 stamps them on arrival instead, to compare.
     let correctForwarded = ProcessInfo.processInfo.environment["SEQUENT_RAW_FORWARD"] == nil
+    // Each phone's clock, from its answers to our pings: the round trips and
+    // offsets of the last thirty seconds, and a ping every half second.
+    var syncs: [ObjectIdentifier: [(at: Double, roundTrip: Int64, offset: Int64)]] = [:]
+    var pingTimers: [ObjectIdentifier: DispatchSourceTimer] = [:]
+    var bestSync: (roundTrip: Int64, offset: Int64)?
+    func best(_ id: ObjectIdentifier) -> (roundTrip: Int64, offset: Int64)? {
+        syncs[id]?.min { $0.roundTrip < $1.roundTrip }.map { ($0.roundTrip, $0.offset) }
+    }
     func listenForPhones() {
         let l: NWListener
         do { l = try NWListener(using: .udp) }
         catch { FileHandle.standardError.write(Data("Sequent: can't listen for phones: \(error)\n".utf8)); return }
         l.service = NWListener.Service(name: Host.current().localizedName ?? "Sequent", type: "_sequent._udp")
         l.newConnectionHandler = { [weak self] c in
+            guard let self else { return }
             c.start(queue: .main)
-            self?.readForwarded(c)
+            let id = ObjectIdentifier(c)
+            let t = DispatchSource.makeTimerSource(queue: .main)
+            t.schedule(deadline: .now(), repeating: .milliseconds(500), leeway: .milliseconds(5))
+            t.setEventHandler { c.send(content: Data(pingPacket(nowNs())), completion: .idempotent) }
+            t.resume()
+            self.pingTimers[id] = t
+            c.stateUpdateHandler = { [weak self] state in
+                if case .cancelled = state { self?.pingTimers[id]?.cancel(); self?.pingTimers[id] = nil; self?.syncs[id] = nil }
+                if case .failed = state { self?.pingTimers[id]?.cancel(); self?.pingTimers[id] = nil; self?.syncs[id] = nil }
+            }
+            self.readForwarded(c)
         }
         l.stateUpdateHandler = { state in FileHandle.standardError.write(Data("Sequent: listening for phones (_sequent._udp) \(state)\n".utf8)) }
         l.start(queue: .main)
@@ -616,15 +653,29 @@ final class Helper {
     }
     func readForwarded(_ c: NWConnection) {
         c.receiveMessage { [weak self] data, _, _, error in
+            let got = nowNs()
             guard let self, error == nil else { c.cancel(); return }
+            let id = ObjectIdentifier(c)
+            if let data, let (t1, t2, t3) = pongTimes(Array(data)) {
+                let s = clockSync(t1: t1, t2: t2, t3: t3, t4: got)
+                var list = self.syncs[id, default: []]
+                list.append((Double(got) / 1e9, s.roundTrip, s.offset))
+                list.removeAll { Double(got) / 1e9 - $0.at > 30 }
+                self.syncs[id] = list
+                self.bestSync = self.best(id)
+            }
             if let data, let (port, source, heard, packet) = forwarded(Array(data)),
                Date().timeIntervalSince1970 - (self.direct[source] ?? 0) > 3 {
                 self.forwardedCount += 1
                 let arrived = Date().timeIntervalSince1970 * 1000
                 self.hops.append((arrived, arrived - heard))
                 self.hops.removeAll { arrived - $0.at > 10_000 }
+                // With the phone's clock known, when it heard the packet is
+                // exactly that moment on ours; without (a phone that doesn't
+                // answer pings), the quickest packet lately stands in.
                 let base = self.hops.map(\.delay).min() ?? 0
-                self.handle(packet, port: port, source: source, at: self.correctForwarded ? (heard + base) / 1000 : nil)
+                let mine = self.best(id).map { heard - Double($0.offset) / 1e6 } ?? heard + base
+                self.handle(packet, port: port, source: source, at: self.correctForwarded ? mine / 1000 : nil)
                 if arrived - self.hopsTold > 2000 { self.hopsTold = arrived; self.tellHops() }
             }
             self.readForwarded(c)
@@ -635,10 +686,13 @@ final class Helper {
     func tellHops() {
         guard let h = hopStats(hops.map(\.delay)) else { return }
         hopSummary = h
-        let line = String(format: "via iPhone over Wi-Fi: Wi-Fi delay %.0f ms typical, %.0f ms at worst (95%%), baseline %.0f ms", h.median, h.p95, h.base)
+        var line = String(format: "via iPhone over Wi-Fi: Wi-Fi delay %.0f ms typical, %.0f ms at worst (95%%), baseline %.0f ms", h.median, h.p95, h.base)
+        if let b = bestSync { line += String(format: "; clocks synced, one way %.1f ms, phone %+.1f ms", Double(b.roundTrip) / 2e6, Double(b.offset) / 1e6) }
         FileHandle.standardError.write(Data("Sequent: \(line)\(correctForwarded ? "" : " (not corrected)")\n".utf8))
         broadcast(["type": "forwarding", "baseMs": (h.base * 10).rounded() / 10, "medianMs": (h.median * 10).rounded() / 10,
-                   "p95Ms": (h.p95 * 10).rounded() / 10, "packets": forwardedCount, "corrected": correctForwarded])
+                   "p95Ms": (h.p95 * 10).rounded() / 10, "packets": forwardedCount, "corrected": correctForwarded,
+                   "oneWayMs": bestSync.map { (Double($0.roundTrip) / 2e5).rounded() / 10 } ?? NSNull(),
+                   "clockOffsetMs": bestSync.map { (Double($0.offset) / 1e5).rounded() / 10 } ?? NSNull()])
         onChange()
     }
 
@@ -1310,6 +1364,11 @@ if CommandLine.arguments.contains("--selftest-forward") {
     let d: [UInt8] = Array("SQFW".utf8) + [1, 0xc3, 0x51, 169, 254, 11, 117] + [0, 0, 1, 0x9a, 0x1b, 0x7c, 0x2a, 0x3b] + Array("Qspt1WmJOL".utf8) + [0x28]
     if let f = forwarded(d) { print("forwarded port=\(f.port) from=\(f.source.map(String.init).joined(separator: ".")) heard=\(Int(f.heardMs)) bytes=\(f.packet.count)") }
     print("refused \(forwarded(Array("hello world, not ours".utf8)) == nil) \(forwarded(Array(d.prefix(19))) == nil)")
+    let t1: UInt64 = 1_791_500_000_000_000_000, ms: UInt64 = 1_000_000
+    let even = clockSync(t1: t1, t2: t1 + 38 * ms, t3: t1 + 39 * ms, t4: t1 + 17 * ms)
+    let uneven = clockSync(t1: t1, t2: t1 + 32 * ms, t3: t1 + 33 * ms, t4: t1 + 17 * ms)
+    print("sync offset=\(even.offset) roundTrip=\(even.roundTrip); uneven offset=\(uneven.offset) roundTrip=\(uneven.roundTrip)")
+    if let back = pongTimes(Array("SQPO".utf8) + [1] + pingPacket(7).suffix(8) + pingPacket(8).suffix(8) + pingPacket(9).suffix(8)) { print("pong \(back.t1) \(back.t2) \(back.t3)") }
     for delays in [[40.0, 52, 41, 47, 90, 40.5, 43, 44, 45, 46, 60, 42, 41, 48, 49, 50, 51, 43, 44, 45], [5.0], [Double]()] {
         if let h = hopStats(delays) { print(String(format: "hops base=%.1f median=%.1f p95=%.1f", h.base, h.median, h.p95)) } else { print("hops none") }
     }
