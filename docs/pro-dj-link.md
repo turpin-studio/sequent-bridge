@@ -97,9 +97,13 @@ identity (below). It is tested against a fake server only.
   one (`08 00 00`), and a Key Shift of +100 and then −200. `statusKey()`
   decodes it, and the page's key section follows it. (We first took this for
   a finding of our own and read it wrong; their table was right.)
-- **The track's identity is missing.** Source player, slot, track type and
-  rekordbox ID are all zero with tracks loaded, on both decks, on 5 and 8
-  October, so the database lookup has nothing to ask for. Numbers that
+- **The track's identity was missing, then wasn't.** Source player, slot,
+  track type and rekordbox ID were all zero with tracks loaded, on both
+  decks, on 5 and 8 October, so the database lookup had nothing to ask for.
+  On 19 October, with a track loaded from the deck's own USB stick, they
+  were there: `01 03 01` and ID 90 at 0x28–0x2f (player 1, USB, a rekordbox
+  track), in the status an iPhone recorded (below). What differed the
+  earlier times, how the tracks were loaded perhaps, is still to find. Numbers that
   change with the track sit just after those fields (0x34–0x47) and repeat
   as a block about six times further on (from 0x18c), each copy beside what
   looks like a cue entry; the block adds one more at 0x194 (219 and 60 on
@@ -110,7 +114,21 @@ identity (below). It is tested against a fake server only.
   3000X sends it four times a second, only to the announced device (Sequent
   as player 7), 44 bytes: the usual name and device number, eight bytes
   remaining, and that device's player number at 0x26. Perhaps an
-  acknowledgement of the announcement; unknown.
+  acknowledgement of the announcement; unknown. On 19 October it came in a
+  burst: fourteen over about three seconds after the iPhone first
+  announced, 0x26 again `07`, and none after.
+- **Joining the link, a deck claims its number in stages** on port 50000:
+  stage one (0x00) for numbers 1, 2 and 3 in turn, stage two (0x02), the
+  final stage (0x04) and an initial announcement (0x0a), with a channel
+  conflict packet (0x08) between. Stage two carries the claimant's IP and
+  MAC at 0x24–0x2d, so its player number is at 0x2e, not 0x24 as in the
+  others; read at 0x24 it looks like player 169.
+- **An iPhone hears it all over a USB-C cable** into the back of a
+  CDJ-3000X, on 19 October 2026 (iOS 26.6, Sequent build 19): the cable
+  is a link-local network interface (`en4`, 169.254.39.61), the deck's
+  broadcasts arrive, the iPhone's announcements reach it, and it sends its
+  status back, with no multicast entitlement. The phone's debug report is
+  in [tools/recordings/iphone-usb-2026-10-19](../tools/recordings/iphone-usb-2026-10-19/debug-report.md).
 - **The beat grid can be loose**: one track at 92.54 BPM ran 600 to 668 ms
   between beats, the same shape every bar.
 

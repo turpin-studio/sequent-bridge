@@ -4,5 +4,8 @@
 {
   "config": {
     "MD013": { "code_blocks": false, "tables": false }
-  }
+  },
+  // Recordings are kept as the devices and apps wrote them: a debug report
+  // from the iPhone app is evidence, not prose to reflow.
+  "ignores": ["tools/recordings/**"]
 }
