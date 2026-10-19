@@ -123,6 +123,19 @@ identity (below). It is tested against a fake server only.
   conflict packet (0x08) between. Stage two carries the claimant's IP and
   MAC at 0x24–0x2d, so its player number is at 0x2e, not 0x24 as in the
   others; read at 0x24 it looks like player 169.
+- **Firmware 1.41 changes nothing we can see** (19 October 2026, `make
+  compare` against the 1.40 recording of 11 October): the same packet
+  types, the same lengths, the fields where we read them; only the firmware
+  string (`1.41`, 0x7f). Recorded from power-on as
+  `cdj3000x-1.41-boot-2026-10-19`, seven minutes with two tracks from USB,
+  MASTER and Key Shift.
+- **A boot, from power-on**: DHCP first, then three initial announcements
+  (0x0a), three of each claim stage (0x00, 0x02, 0x04), 300 ms apart, 4.2
+  seconds in all, and keep-alives from then on. The status says playing
+  before any track is loaded. The track's identity was there for both tracks
+  loaded from USB (IDs 154 and 132, slot 3), zero only for a moment while
+  one loaded, and Key Shift stepped +100 to +500 cents at 0x164.
+  `cdj3000x-1.41-join-2026-10-19` is twenty seconds of an earlier start.
 - **An iPhone hears it all over a USB-C cable** into the back of a
   CDJ-3000X, on 19 October 2026 (iOS 26.6, Sequent build 19): the cable
   is a link-local network interface (`en4`, 169.254.39.61), the deck's
