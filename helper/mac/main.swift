@@ -674,7 +674,9 @@ final class Helper {
             if ok != 0 { close(fd); return nil }
             return (fd, announcement(number: playerNumber, ip: link.ip, mac: link.mac))
         }
+        let could = canLead
         linkList = now
+        if canLead != could { broadcast(["type": "links", "canLead": canLead]) }
         onChange()
     }
 
@@ -803,7 +805,7 @@ final class Helper {
                 case .ready:
                     self.clients[id] = c
                     // Its version too, so the page can say when a newer one is out.
-                    self.send(c, ["type": "hello", "version": APP_VERSION, "devices": Array(self.devices.values), "statuses": self.statuses.values.map(\.0)])
+                    self.send(c, ["type": "hello", "version": APP_VERSION, "devices": Array(self.devices.values), "statuses": self.statuses.values.map(\.0), "canLead": self.canLead])
                     self.onChange()
                 case .failed, .cancelled:
                     self.clients[id] = nil
@@ -847,9 +849,20 @@ final class Helper {
     // 1970, when the page's beat is heard) }: each beat while the page
     // carries on, and playing false when it stops. The beat packet goes out
     // as that beat is heard.
+    // Leading needs a link of this Mac's own to the decks: they must hear its
+    // announcement, status and beats. Hearing them only through a phone (over
+    // Wi-Fi) isn't enough, as nothing goes back that way.
+    var canLead: Bool { !linkList.isEmpty }
+
     func lead(_ m: [String: Any]) {
         guard !listenOnly else { return }
         let playing = m["playing"] as? Bool == true, tempo = m["tempo"] as? Double ?? 0
+        if playing, !canLead, leader.number == nil {
+            // Asked to lead with no way to: say why, rather than asking the
+            // decks for master into nothing.
+            broadcast(["type": "leading", "master": false, "number": NSNull(), "canLead": false, "t": Int((Date().timeIntervalSince1970 * 1000).rounded())])
+            return
+        }
         let beat = m["beat"] as? Int ?? 1, now = Date().timeIntervalSince1970
         leader.lead(playing: playing, tempo: tempo, beatInBar: beat, players: playerStates, now: now)
         if playing, let at = m["beatAt"] as? Double {
@@ -907,7 +920,7 @@ final class Helper {
         let now = (leader.number, leader.master)
         guard now != told else { return }
         told = now
-        var m: Message = ["type": "leading", "master": leader.master, "t": Int((Date().timeIntervalSince1970 * 1000).rounded())]
+        var m: Message = ["type": "leading", "master": leader.master, "canLead": canLead, "t": Int((Date().timeIntervalSince1970 * 1000).rounded())]
         m["number"] = leader.number.map { Int($0) } ?? NSNull()
         broadcast(m)
         onChange()

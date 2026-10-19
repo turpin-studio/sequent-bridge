@@ -57,6 +57,7 @@ Sent once, first, on connecting.
 | `platform` | string, optional | `"linux"` from Sequent for Linux; absent from the Mac app |
 | `devices` | array | the last `device` message from each device seen |
 | `statuses` | array | the last `status` message from each player |
+| `canLead` | boolean, optional | the Mac app can lead the decks: it has a link of its own to them, not only a phone passing them on; absent from Linux |
 
 ## `device`
 
@@ -139,6 +140,31 @@ when it starts, takes or loses the tempo master role, and stops. Mac only.
 | --- | --- | --- |
 | `number` | integer or null | the player number it leads as, `null` once it has stopped |
 | `master` | boolean | it holds the tempo master role |
+| `canLead` | boolean | it can lead at all; `false`, with `number` null, answers a `lead` it can't carry out |
+
+## `links`
+
+The Mac app gaining or losing a link of its own to the decks, which leading
+needs. Hearing them only through a phone passing them on over Wi-Fi isn't
+enough, since nothing goes back that way.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `canLead` | boolean | as in `hello` |
+
+## `forwarding`
+
+How a phone's packets travel to the Mac app, every two seconds while a phone
+passes the decks on: delays in milliseconds, arrival less when the phone
+heard each one, over the last ten seconds.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `baseMs` | number | the smallest: the network's quickest plus the clocks' difference |
+| `medianMs` | number | the typical delay behind it |
+| `p95Ms` | number | the delay behind it 95% of packets beat |
+| `packets` | integer | packets passed on so far |
+| `corrected` | boolean | whether packets are stamped when the phone heard them |
 
 ## From the app: `lead`
 
