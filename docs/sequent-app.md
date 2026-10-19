@@ -230,7 +230,9 @@ by how much. Only the Mac app listens; the Linux bridge doesn't yet.
 Tested on 19 October 2026 with the iPhone app in the simulator, a recording
 replayed into it on moved ports and forwarding on: the app's WebSocket
 carried the deck's announcement, beats and status, and with the iPhone app
-closed, nothing.
+closed, nothing. Then on the rig the same evening: an iPhone (build 25) on a
+CDJ-3000X by USB-C, passing it over Wi-Fi to this Mac, whose page followed
+the deck. How evenly the beats arrive over Wi-Fi is still to measure.
 
 ## The WebSocket
 
