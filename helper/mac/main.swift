@@ -990,16 +990,17 @@ final class App: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc func openSite() { NSWorkspace.shared.open(SITE) }
     @objc func openDownload() { NSWorkspace.shared.open(DOWNLOAD_PAGE) }
     // The standard About panel: the icon, the version from Info.plist, and the
-    // credit, since the protocol this speaks was worked out and published by
-    // Deep Symmetry. A menu-bar app has no window to come forward from, so it
+    // credit to Deep Symmetry, whose work Sequent took its inspiration from and
+    // who worked out and published the protocol it speaks. A menu-bar app has no window to come forward from, so it
     // brings itself forward first or the panel opens behind everything.
     @objc func showAbout() {
-        let credits = NSMutableAttributedString(string: "Following the CDJs is built on ")
-        credits.append(NSAttributedString(string: "Deep Symmetry's DJ Link research", attributes: [.link: RESEARCH]))
+        let lead = "Sequent took inspiration from the amazing work carried out by Deep Symmetry: "
+        let credits = NSMutableAttributedString(string: lead)
+        credits.append(NSAttributedString(string: "their DJ Link research", attributes: [.link: RESEARCH]))
         credits.append(NSAttributedString(string: ", the Pro DJ Link protocol they worked out and published.\n\nturpin.studio"))
         let all = NSRange(location: 0, length: credits.length)
         credits.addAttribute(.font, value: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize), range: all)
-        credits.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: NSRange(location: 0, length: 31))
+        credits.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: NSRange(location: 0, length: (lead as NSString).length))
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits, .applicationName: "Sequent"])
     }

@@ -3,8 +3,9 @@
 Which parts of the Pro DJ Link protocol Sequent uses, what it sends, and what
 our own decks (two CDJ-3000Xs on firmware 1.40, and a DJM-750MK2) have
 shown. It is not a protocol reference: that is
-[Deep Symmetry's DJ Link analysis][djl], whose work all of this rests on, and
-packet layouts are left to it rather than copied here.
+[Deep Symmetry's DJ Link analysis][djl], the amazing work Sequent took its
+inspiration from and all of this rests on, and packet layouts are left to it
+rather than copied here.
 
 The code is `helper/mac/main.swift`, and [sequent-app.md](sequent-app.md)
 explains how the app is built around it.

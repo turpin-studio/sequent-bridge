@@ -21,13 +21,14 @@ Both send the same messages, written down in
 [tools/fixtures/selftest.expected](tools/fixtures/selftest.expected) from
 real CDJ captures.
 
-## Built on Deep Symmetry's research
+## Inspired by Deep Symmetry
 
-Everything Sequent knows about Pro DJ Link comes from
-[Deep Symmetry's DJ Link analysis](https://djl-analysis.deepsymmetry.org/),
-the protocol they worked out and published, and
-which [beat-link](https://github.com/Deep-Symmetry/beat-link) implements.
-The code here is written from their documentation, not their code.
+Sequent took inspiration from the amazing work carried out by Deep Symmetry:
+[their DJ Link analysis](https://djl-analysis.deepsymmetry.org/), the Pro
+DJ Link protocol they worked out and published, and
+[beat-link](https://github.com/Deep-Symmetry/beat-link), which implements it.
+Everything Sequent knows about the protocol comes from that analysis. The
+code here is written from their documentation, not their code.
 [docs/pro-dj-link.md](docs/pro-dj-link.md) lists which parts Sequent uses and
 what our own decks (two CDJ-3000Xs and a DJM-750MK2) showed, including the
 3000X's 1152-byte status packet and its key and Key Shift.

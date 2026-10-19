@@ -593,8 +593,9 @@ def tray(listen_only):
 
     def about():
         d = Gtk.AboutDialog(program_name="Sequent", version=VERSION, website=SITE, website_label="turpin.studio",
-                            logo_icon_name="sequent", comments="Following the CDJs is built on Deep Symmetry's DJ Link "
-                            "research, the Pro DJ Link protocol they worked out and published.")
+                            logo_icon_name="sequent", comments="Sequent took inspiration from the amazing work carried out by "
+                            "Deep Symmetry: their DJ Link research, the Pro DJ Link protocol they "
+                            "worked out and published.")
         d.add_credit_section("Pro DJ Link", [f"Deep Symmetry {RESEARCH}"])
         d.run()
         d.destroy()

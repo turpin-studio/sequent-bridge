@@ -66,7 +66,8 @@ if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
 COPYRIGHT = """Sequent, the Pro DJ Link connection for turpin.studio.
 Copyright 2026 Dean Turpin <hello@turpin.dev>. All rights reserved.
 
-The Pro DJ Link decoding follows Deep Symmetry's DJ Link packet analysis,
+Sequent took inspiration from the amazing work carried out by Deep Symmetry.
+Its Pro DJ Link decoding follows their DJ Link packet analysis,
 https://djl-analysis.deepsymmetry.org/
 """
 
