@@ -262,7 +262,9 @@ final class Leader {
                 number = UInt8(n)
                 out(.announceAs(UInt8(n)))
             }
-            if !leading { leading = true; held = false; claim(players, now: now, ask: false) }
+            // Playing again while handing over calls the handover off: the
+            // role is ours to keep, not still offered to a deck.
+            if !leading { leading = true; held = false; next = 0xff; claim(players, now: now, ask: false) }
         } else if leading {
             leading = false
             stoppedAt = now
@@ -307,8 +309,11 @@ final class Leader {
         if leading, !master, !held, now - claimedAt > 2 { claim(players, now: now) }
         if master { held = true }
         if !leading, let at = stoppedAt, now - at > 1, next == 0xff || now - at > 4 {
-            master = false
-            self.number = nil; stoppedAt = nil; next = 0xff; asked = 0
+            stoppedAt = nil; next = 0xff; asked = 0
+            // Still master, as the deck it was offered to never took it: say
+            // we aren't before going, as on quitting.
+            if master { leave(); return }
+            self.number = nil
             out(.announceAs(VIRTUAL_PLAYER))
             return
         }
@@ -1103,6 +1108,87 @@ if CommandLine.arguments.contains("--selftest-lead") {
     run("four decks: no number to lead as") { l in
         l.lead(playing: true, tempo: 124, beatInBar: 1, players: full, now: 0)
         l.tick(now: 0.2, players: full)
+        print("number \(l.number.map(String.init) ?? "none")")
+    }
+    run("the page plays again while handing over: the handover is called off") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: synced, now: 0)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: synced, now: 1)
+        l.tick(now: 1.2, players: synced)
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: synced, now: 1.5)
+        l.tick(now: 1.7, players: synced)
+        l.status(deck(2, master: false))
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: synced, now: 3.4)
+        l.tick(now: 3.6, players: synced)
+        print("master \(l.master)")
+    }
+    let deck2Master: Players = [1: ("169.254.1.1", false, false, true), 2: ("169.254.2.2", true, true, true)]
+    run("a deck takes master unasked, and isn't asked for it back while the page plays") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.tick(now: 0.2, players: two)
+        l.status(deck(2, master: true))
+        print("master \(l.master)")
+        for now in stride(from: 1.0, through: 7.0, by: 1.5) {
+            l.lead(playing: true, tempo: 124, beatInBar: 1, players: deck2Master, now: now)
+            l.tick(now: now + 0.2, players: deck2Master)
+        }
+    }
+    run("handed to deck 2, which never takes it: let go after four seconds") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: synced, now: 0)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: synced, now: 1)
+        l.tick(now: 1.2, players: synced)
+        l.tick(now: 3, players: synced)
+        l.tick(now: 4.9, players: synced)
+        l.tick(now: 5.1, players: synced)
+        l.tick(now: 5.3, players: synced)
+    }
+    run("a request is agreed to only as master, and never from our own number") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
+        l.requested(by: 2, ip: "169.254.2.2")
+        l.status(deck(1, master: true, yieldingTo: 4))
+        l.requested(by: 4, ip: "169.254.9.9")
+        l.tick(now: 0.2, players: oneMaster)
+        print("master \(l.master)")
+    }
+    run("a deck handing over after the page has stopped isn't taken up") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: oneMaster, now: 0)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: oneMaster, now: 0.5)
+        l.status(deck(1, master: true, yieldingTo: 4))
+        print("master \(l.master)")
+        l.tick(now: 1.6, players: oneMaster)
+    }
+    run("our own status, a short packet and a deck not master change nothing") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.status(deck(4, master: true))
+        l.status(Array(deck(2, master: true).prefix(0x90)))
+        l.status(deck(2, master: false, yieldingTo: 4, sync: 9))
+        l.tick(now: 0.2, players: two)
+        print("master \(l.master)")
+    }
+    run("beats only while leading, and a page's nonsense tempo is passed over") { l in
+        l.beatNow(beatInBar: 1)
+        l.tick(now: 0, players: two)
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.lead(playing: true, tempo: 0, beatInBar: 0, players: two, now: 0.1)
+        l.lead(playing: true, tempo: -3, beatInBar: 7, players: two, now: 0.2)
+        l.beatNow(beatInBar: 2)
+        l.lead(playing: true, tempo: 128.5, beatInBar: 3, players: two, now: 0.3)
+        l.beatNow(beatInBar: 3)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: two, now: 0.4)
+        l.beatNow(beatInBar: 4)
+    }
+    run("playing again after letting go: announced afresh, and master again") { l in
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 0)
+        l.lead(playing: false, tempo: 0, beatInBar: 1, players: two, now: 1)
+        l.tick(now: 2.2, players: two)
+        l.tick(now: 2.4, players: two)
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: two, now: 3)
+        l.tick(now: 3.2, players: two)
+    }
+    run("with deck 4 on the link, Sequent leads as player 3") { l in
+        let deck4: Players = [4: ("169.254.4.4", false, true, true)]
+        l.lead(playing: true, tempo: 124, beatInBar: 1, players: deck4, now: 0)
+        l.status(deck(3, master: true))
+        l.tick(now: 0.2, players: deck4)
         print("number \(l.number.map(String.init) ?? "none")")
     }
     print("# decoded")

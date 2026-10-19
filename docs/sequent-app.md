@@ -44,7 +44,9 @@ the decks, so one with Sync on follows Sequent:
   50002) and named in our handoff byte, and when it asserts master we let
   go, our sync counter one above the players'. When the page stops leading
   it hands master to a player playing in sync, or just lets it go, and a
-  second later (four at most) announces as 7 again.
+  second later (four at most) announces as 7 again. Still master then, as
+  that player never took it, it first sends a last status saying it isn't,
+  as on quitting. The page playing again meanwhile calls the handover off.
 - **A deck that takes master keeps it.** The request is repeated only until
   Sequent has held master once; after a deck takes it (its MASTER button),
   that's the DJ's choice and isn't fought over, and the page switches its

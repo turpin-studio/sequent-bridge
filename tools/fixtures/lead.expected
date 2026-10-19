@@ -48,6 +48,54 @@ announce 7
 number none
 # four decks: no number to lead as
 number none
+# the page plays again while handing over: the handover is called off
+announce 4
+status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+master true
+# a deck takes master unasked, and isn't asked for it back while the page plays
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+master false
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=1 synced=1 Mm=0 Mh=ff sync=1 beat=0
+# handed to deck 2, which never takes it: let go after four seconds
+announce 4
+status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
+status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
+status len=284 master=1 playing=0 synced=1 Mm=1 Mh=02 sync=1 beat=0
+status len=284 master=0 playing=0 synced=0 Mm=0 Mh=ff sync=1 beat=0
+status len=284 master=0 playing=0 synced=0 Mm=0 Mh=ff sync=1 beat=0
+announce 7
+# a request is agreed to only as master, and never from our own number
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+master true
+# a deck handing over after the page has stopped isn't taken up
+announce 4
+master false
+announce 7
+# our own status, a short packet and a deck not master change nothing
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+master true
+# beats only while leading, and a page's nonsense tempo is passed over
+announce 4
+beat len=96 number=4 inbar=2 bpm=12400 next=484 bar=1452
+beat len=96 number=4 inbar=3 bpm=12850 next=467 bar=934
+# playing again after letting go: announced afresh, and master again
+announce 4
+announce 7
+announce 4
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+# with deck 4 on the link, Sequent leads as player 3
+announce 3
+status len=284 master=1 playing=1 synced=1 Mm=1 Mh=ff sync=1 beat=0
+number 3
 # decoded
 {"bpm":124.5,"firmware":"1.43","master":true,"name":"sequent","number":4,"onAir":false,"pitch":0,"playing":true,"rekordboxId":1,"slot":3,"source":4,"sync":true,"trackNumber":1,"trackType":1,"type":"status"}
 {"beat":3,"bpm":124.5,"name":"sequent","nextBarMs":964,"nextBeatMs":482,"number":4,"pitch":0,"tempo":124.5,"type":"beat"}
