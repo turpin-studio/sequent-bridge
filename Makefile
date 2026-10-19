@@ -1,7 +1,7 @@
 # Sequent: the bridge between DJ gear and the apps that follow it.
 # `make test` runs the self-tests; `make app`, `make dmg` and `make deb` build.
 
-.PHONY: test app dmg image deb record replay
+.PHONY: test app dmg image deb record replay compare
 
 # The Linux bridge's self-test, and the recording replayer's tests. The Mac
 # app's self-tests need a build: make app && python3 tools/check_app.py build/Sequent.app
@@ -71,3 +71,7 @@ record:
 	@tools/djlink-record.sh $(or $(NAME),$(shell date +%Y-%m-%d-%H%M)) $(or $(SECONDS),120)
 replay:
 	@python3 tools/djlink_replay.py $(or $(FILE),two-decks-2026-10-08) $(if $(LOOP),--loop)
+
+# What changed between two recordings, type by type: make compare OLD=... NEW=...
+compare:
+	@python3 tools/compare_recordings.py $(OLD) $(NEW)
