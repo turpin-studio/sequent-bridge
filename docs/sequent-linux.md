@@ -52,7 +52,7 @@ on Linux.
 ## Installing
 
 ```sh
-curl -fLO https://github.com/turpin-studio/sequent/releases/download/<tag>/Sequent-<version>.deb
+curl -fLO https://github.com/turpin-studio/sequent-bridge/releases/download/<tag>/Sequent-<version>.deb
 sudo apt install ./Sequent-<version>.deb
 sequent &
 ```

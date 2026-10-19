@@ -52,9 +52,9 @@ tempo master role, so a deck with Sync on follows Sequent; see
 ## Installing
 
 - **macOS:** the signed and notarised disk image from the
-  [latest release](https://github.com/turpin-studio/sequent/releases/latest),
+  [latest release](https://github.com/turpin-studio/sequent-bridge/releases/latest),
   always at
-  [releases/latest/download/Sequent.dmg](https://github.com/turpin-studio/sequent/releases/latest/download/Sequent.dmg).
+  [releases/latest/download/Sequent.dmg](https://github.com/turpin-studio/sequent-bridge/releases/latest/download/Sequent.dmg).
   Each release's notes come from [helper/releases.json](helper/releases.json),
   and the app checks the latest release's `latest.json` for updates.
 - **Linux:** not released yet; [docs/sequent-linux.md](docs/sequent-linux.md)

@@ -3,7 +3,7 @@
     "version": "0.3.2",
     "date": "2026-10-12",
     "notes": [
-      "Downloads and update checks now come from the GitHub releases of turpin-studio/sequent, where the code is public under the Eclipse Public License 2.0.",
+      "Downloads and update checks now come from the GitHub releases of turpin-studio/sequent-bridge, where the code is public under the Eclipse Public License 2.0.",
       "Lets the studio's apps on turpin.studio subdomains, such as midi.turpin.studio, connect."
     ]
   },

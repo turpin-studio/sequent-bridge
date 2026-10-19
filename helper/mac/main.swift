@@ -47,7 +47,7 @@ let APP_VERSION = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? 
 // Which release is the latest, attached to each GitHub release by the release
 // pipeline (GitHub redirects this to the newest one), and the page people
 // download it from, which shows the latest release's notes and file.
-let LATEST = URL(string: "https://github.com/turpin-studio/sequent/releases/latest/download/latest.json")!
+let LATEST = URL(string: "https://github.com/turpin-studio/sequent-bridge/releases/latest/download/latest.json")!
 let DOWNLOAD_PAGE = URL(string: "https://turpin.studio/download/")!
 // Whether version a is newer than b, both X.Y.Z.
 func newer(_ a: String, than b: String) -> Bool {
